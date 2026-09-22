@@ -6,6 +6,9 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import java.awt.Color;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.NoRouteToHostException;
@@ -14,9 +17,13 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.Base64;
 import java.util.function.Consumer;
+import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Value;
@@ -67,8 +74,12 @@ public class AwtrixClient
 	private final AtomicBoolean loopChanged = new AtomicBoolean(false);
 	private final AtomicReference<Boolean> reachable = new AtomicReference<>();
 	private volatile Consumer<String> messages = message -> { };
+	private volatile double pulse = 1.0;
+	private final Map<String, String> pulseIcons = new ConcurrentHashMap<>();
 
 	private static final long STATS_REFRESH_MS = 8_000L;
+	private static final double MAX_PULSE = 3.0;
+	private static final int PULSE_ICON_CACHE = 64;
 
 	@Inject
 	AwtrixClient(OkHttpClient httpClient, UlanziConfig config, Gson gson)
@@ -85,6 +96,83 @@ public class AwtrixClient
 	{
 		messages = sink == null ? message -> { } : sink;
 		reachable.set(null);
+	}
+
+	/**
+	 * Brightness applied to everything sent from here until it is set back, which is
+	 * how an XP drop lifts the whole panel at once instead of moving text across it.
+	 * Black stays black, so the panel brightens without washing out.
+	 */
+	void setPulse(double factor)
+	{
+		pulse = Math.max(1.0, Math.min(MAX_PULSE, factor));
+	}
+
+	private String hex(Color color)
+	{
+		return toHex(brighten(color, pulse));
+	}
+
+	static Color brighten(Color color, double factor)
+	{
+		if (factor <= 1.0)
+		{
+			return color;
+		}
+		return new Color(
+			Math.min(255, (int) Math.round(color.getRed() * factor)),
+			Math.min(255, (int) Math.round(color.getGreen() * factor)),
+			Math.min(255, (int) Math.round(color.getBlue() * factor)));
+	}
+
+	/**
+	 * Icons arrive already encoded, so they are decoded and re-encoded to pulse with
+	 * the rest. Quantised to whole percent so a pulse reuses a handful of encodings.
+	 */
+	private String pulseIcon(String icon)
+	{
+		double factor = pulse;
+		if (icon == null || icon.isEmpty() || factor <= 1.0)
+		{
+			return icon;
+		}
+		int step = (int) Math.round(factor * 100);
+		if (pulseIcons.size() > PULSE_ICON_CACHE)
+		{
+			pulseIcons.clear();
+		}
+		return pulseIcons.computeIfAbsent(step + ":" + icon, key -> brightenIcon(icon, step / 100.0));
+	}
+
+	static String brightenIcon(String icon, double factor)
+	{
+		try
+		{
+			BufferedImage image = ImageIO.read(new ByteArrayInputStream(Base64.getDecoder().decode(icon)));
+			if (image == null)
+			{
+				return icon;
+			}
+			BufferedImage lit = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+			for (int y = 0; y < image.getHeight(); y++)
+			{
+				for (int x = 0; x < image.getWidth(); x++)
+				{
+					lit.setRGB(x, y, brighten(new Color(image.getRGB(x, y)), factor).getRGB());
+				}
+			}
+			ByteArrayOutputStream out = new ByteArrayOutputStream();
+			if (!ImageIO.write(lit, "gif", out))
+			{
+				return icon;
+			}
+			return Base64.getEncoder().encodeToString(out.toByteArray());
+		}
+		catch (IOException | IllegalArgumentException ex)
+		{
+			log.debug("Could not pulse icon", ex);
+			return icon;
+		}
 	}
 
 	void clearCache()
@@ -250,12 +338,12 @@ public class AwtrixClient
 		return xpDropFlightMs(text, icon != null);
 	}
 
-	private static JsonObject xpDropBody(String text, Color color, String icon)
+	private JsonObject xpDropBody(String text, Color color, String icon)
 	{
 		JsonObject body = new JsonObject();
 		body.addProperty("name", NOTIF_XP_DROP);
 		body.addProperty("text", text);
-		body.addProperty("textColor", toHex(color));
+		body.addProperty("textColor", hex(color));
 		body.addProperty("font", "small");
 		body.addProperty("textCase", "asTyped");
 		body.addProperty("backgroundColor", "#000000");
@@ -322,7 +410,7 @@ public class AwtrixClient
 		if (effect.usesSideEyes())
 		{
 			body.addProperty("backgroundColor", "#000000");
-			body.addProperty("textColor", toHex(config.afkTextColor()));
+			body.addProperty("textColor", hex(config.afkTextColor()));
 			body.addProperty("textInFront", true);
 			body.add("draw", buildSideEyesDraw());
 		}
@@ -334,11 +422,11 @@ public class AwtrixClient
 			{
 				body.addProperty("palette", effect.paletteName());
 			}
-			body.addProperty("textColor", toHex(config.afkTextColor()));
+			body.addProperty("textColor", hex(config.afkTextColor()));
 		}
 		else if (effect.usesPaletteText())
 		{
-			body.addProperty("backgroundColor", toHex(config.afkBackgroundColor()));
+			body.addProperty("backgroundColor", hex(config.afkBackgroundColor()));
 			body.addProperty("palette", effect.paletteName());
 			body.addProperty("textColor", "palette");
 			body.addProperty("paletteSpan", 16);
@@ -347,8 +435,8 @@ public class AwtrixClient
 		}
 		else
 		{
-			body.addProperty("backgroundColor", toHex(config.afkBackgroundColor()));
-			body.addProperty("textColor", toHex(config.afkTextColor()));
+			body.addProperty("backgroundColor", hex(config.afkBackgroundColor()));
+			body.addProperty("textColor", hex(config.afkTextColor()));
 			if (config.afkBlink())
 			{
 				body.addProperty("textBlinkMs", config.afkBlinkMs());
@@ -532,8 +620,8 @@ public class AwtrixClient
 		JsonObject body = new JsonObject();
 		body.addProperty("name", name);
 		body.addProperty("text", text);
-		body.addProperty("textColor", toHex(textColor));
-		body.addProperty("backgroundColor", toHex(background));
+		body.addProperty("textColor", hex(textColor));
+		body.addProperty("backgroundColor", hex(background));
 		body.addProperty("font", "large");
 		body.addProperty("textCenter", true);
 		body.add("scroll", scrollStatic());
@@ -582,19 +670,19 @@ public class AwtrixClient
 		boolean shrink = activityIcon != null && value != null && value.length() >= 3;
 		body.addProperty("font", shrink ? "small" : "large");
 		body.addProperty("text", value);
-		body.addProperty("textColor", toHex(color));
+		body.addProperty("textColor", hex(color));
 		body.addProperty("textCenter", true);
 		body.add("scroll", scrollStatic());
 		applyActivityIcon(body, activityIcon);
 		if (background != null)
 		{
-			body.addProperty("backgroundColor", toHex(background));
+			body.addProperty("backgroundColor", hex(background));
 		}
 
 		if (progressPercent >= 0)
 		{
 			body.addProperty("progress", progressPercent);
-			body.addProperty("progressColor", toHex(progressColor));
+			body.addProperty("progressColor", hex(progressColor));
 			body.addProperty("progressTrackColor", "#202020");
 			body.addProperty("textInFront", true);
 		}
@@ -662,7 +750,7 @@ public class AwtrixClient
 		}
 		if (background != null)
 		{
-			body.addProperty("backgroundColor", toHex(background));
+			body.addProperty("backgroundColor", hex(background));
 		}
 
 		body.add("text", fragmentsJson(fragments));
@@ -670,7 +758,7 @@ public class AwtrixClient
 		if (hpPercent >= 0)
 		{
 			body.addProperty("progress", hpPercent);
-			body.addProperty("progressColor", toHex(hpColor));
+			body.addProperty("progressColor", hex(hpColor));
 			body.addProperty("progressTrackColor", "#202020");
 		}
 		if (hpPercent >= 0 || barCount > 0)
@@ -697,7 +785,7 @@ public class AwtrixClient
 			JsonArray palette = new JsonArray();
 			for (Color stop : gradient)
 			{
-				palette.add(toHex(stop));
+				palette.add(hex(stop));
 			}
 			body.add("palette", palette);
 			body.addProperty("progress", progressPercent);
@@ -708,14 +796,14 @@ public class AwtrixClient
 		putStats(body);
 	}
 
-	private static JsonArray fragmentsJson(List<TextFragment> fragments)
+	private JsonArray fragmentsJson(List<TextFragment> fragments)
 	{
 		JsonArray text = new JsonArray();
 		for (TextFragment fragment : fragments)
 		{
 			JsonObject part = new JsonObject();
 			part.addProperty("text", fragment.getText());
-			part.addProperty("color", toHex(fragment.getColor()));
+			part.addProperty("color", hex(fragment.getColor()));
 			text.add(part);
 		}
 		return text;
@@ -923,7 +1011,7 @@ public class AwtrixClient
 	 * Bars are drawn from the right edge, last in the list at the edge.
 	 * Pass them in left-to-right reading order (hitpoints, prayer, energy, spec).
 	 */
-	private static JsonArray verticalColumns(List<ColumnBar> bars)
+	private JsonArray verticalColumns(List<ColumnBar> bars)
 	{
 		JsonArray draw = new JsonArray();
 		int x = 30;
@@ -937,23 +1025,23 @@ public class AwtrixClient
 		return draw;
 	}
 
-	private static void appendVerticalBar(JsonArray draw, int x, int percent, Color color)
+	private void appendVerticalBar(JsonArray draw, int x, int percent, Color color)
 	{
 		int filled = energyColumnRows(percent);
 		draw.add(drawCmd("rectFill", x, 0, 2, 8, "#202020"));
 		if (filled > 0)
 		{
-			draw.add(drawCmd("rectFill", x, 8 - filled, 2, filled, toHex(color)));
+			draw.add(drawCmd("rectFill", x, 8 - filled, 2, filled, hex(color)));
 		}
 	}
 
-	private static void applyActivityIcon(JsonObject body, String activityIcon)
+	private void applyActivityIcon(JsonObject body, String activityIcon)
 	{
 		if (activityIcon == null || activityIcon.isEmpty())
 		{
 			return;
 		}
-		body.addProperty("icon", activityIcon);
+		body.addProperty("icon", pulseIcon(activityIcon));
 		body.addProperty("iconMode", "fixed");
 	}
 

@@ -454,7 +454,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "xpDrops",
 		name = "XP drops",
-		description = "Fly each XP gain, like +175 xp, across the panel. Gains that land while one is still flying are added to the next.",
+		description = "Show each XP gain, either as +175 xp moving across the panel or as a pulse of the whole display. Gains that land while one is still showing are added to the next.",
 		position = 5,
 		section = skillProgressSection
 	)
@@ -466,7 +466,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "xpDropDirection",
 		name = "XP drop direction",
-		description = "Which way XP drops travel across the panel. In place does not move: on the skill progress page it briefly replaces the level and XP/h, elsewhere it shows still for a moment.",
+		description = "Which way XP drops travel across the panel. In place does not move: on the skill progress page it briefly replaces the level and XP/h, elsewhere it shows still for a moment. Pulse shows no text at all, and instead brightens everything on the panel for a second and fades it back.",
 		position = 6,
 		section = skillProgressSection
 	)

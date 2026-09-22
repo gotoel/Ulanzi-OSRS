@@ -11,7 +11,8 @@ public enum XpDropDirection
 	RIGHT("Left to right", "right"),
 	UP("Bottom to top", null),
 	DOWN("Top to bottom", null),
-	IN_PLACE("In place", null);
+	IN_PLACE("In place", null),
+	PULSE("Pulse", null);
 
 	private final String name;
 	private final String scrollDirection;

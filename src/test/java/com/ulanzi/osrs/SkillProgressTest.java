@@ -70,6 +70,80 @@ public class SkillProgressTest
 	}
 
 	@Test
+	public void thePulseIsFullBrightOnLandingAndFadesBack()
+	{
+		long start = 10_000L;
+		Assert.assertEquals(UlanziOsrsPlugin.PULSE_PEAK,
+			UlanziOsrsPlugin.pulseFactor(start, start), 0.0001);
+
+		double midway = UlanziOsrsPlugin.pulseFactor(start, start + UlanziOsrsPlugin.PULSE_MS / 2);
+		Assert.assertTrue(midway > 1.0 && midway < UlanziOsrsPlugin.PULSE_PEAK);
+
+		Assert.assertEquals(1.0,
+			UlanziOsrsPlugin.pulseFactor(start, start + UlanziOsrsPlugin.PULSE_MS), 0.0001);
+	}
+
+	@Test
+	public void thereIsNoPulseBeforeTheFirstDrop()
+	{
+		Assert.assertEquals(1.0, UlanziOsrsPlugin.pulseFactor(0L, 5_000L), 0.0001);
+	}
+
+	@Test
+	public void thePulseBrightensLitPixelsAndLeavesBlackAlone()
+	{
+		Assert.assertEquals(Color.BLACK, AwtrixClient.brighten(Color.BLACK, 1.8));
+		Assert.assertEquals(new Color(180, 0, 0), AwtrixClient.brighten(new Color(100, 0, 0), 1.8));
+		// Already-bright channels clamp instead of wrapping.
+		Assert.assertEquals(Color.WHITE, AwtrixClient.brighten(Color.WHITE, 1.8));
+		// A factor of 1 is the untouched colour.
+		Assert.assertEquals(new Color(12, 34, 56), AwtrixClient.brighten(new Color(12, 34, 56), 1.0));
+	}
+
+	@Test
+	public void thePulseReEncodesTheIconRatherThanDroppingIt()
+	{
+		String icon = PixelIcon.HITPOINTS.iconData();
+		String lit = AwtrixClient.brightenIcon(icon, 1.8);
+		Assert.assertNotEquals("icon should change when pulsed", icon, lit);
+
+		// Falling back returns the original, so check it really decoded to a brighter image.
+		int[] plain = iconPixels(icon);
+		int[] pulsed = iconPixels(lit);
+		Assert.assertEquals(plain.length, pulsed.length);
+		boolean brighter = false;
+		for (int i = 0; i < plain.length; i++)
+		{
+			Assert.assertTrue("no channel may dim", luma(pulsed[i]) >= luma(plain[i]));
+			brighter |= luma(pulsed[i]) > luma(plain[i]);
+		}
+		Assert.assertTrue("something should be brighter", brighter);
+	}
+
+	private static int[] iconPixels(String base64)
+	{
+		try
+		{
+			java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(
+				new java.io.ByteArrayInputStream(java.util.Base64.getDecoder().decode(base64)));
+			Assert.assertNotNull("icon should decode", image);
+			int[] pixels = new int[image.getWidth() * image.getHeight()];
+			image.getRGB(0, 0, image.getWidth(), image.getHeight(), pixels, 0, image.getWidth());
+			return pixels;
+		}
+		catch (java.io.IOException ex)
+		{
+			throw new AssertionError(ex);
+		}
+	}
+
+	private static int luma(int rgb)
+	{
+		Color color = new Color(rgb);
+		return color.getRed() + color.getGreen() + color.getBlue();
+	}
+
+	@Test
 	public void ratesStayFourCharactersWide()
 	{
 		Assert.assertEquals("950", XpRateTracker.format(950));

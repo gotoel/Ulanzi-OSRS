@@ -85,7 +85,8 @@ If the clock stops answering while you play, the plugin says so in the game chat
 - **XP/h source** picks how the rate is worked out. *Sliding window*, the default, averages only the last **Sliding window** seconds, so the rate follows what you are doing now: it climbs from zero over the first window and falls back to zero when you stop, the way the [XP Meter](https://github.com/Toofifty/xp-meter) plugin's sliding window does. *Session* averages the skill from your second XP drop instead. Both start over after 5 minutes without XP. *RuneLite XP Tracker* matches its panel and globes, including its pause and reset settings
 - The bottom row fills toward the next level with a gradient: the skill's color, red to green, or rainbow
 - Combat keeps hitpoints and prayer up unless **Also in combat** is on; melee follows whichever of Attack, Strength or Defence the XP goes to
-- **XP drops** fly each gain, like `+175 xp`, across the panel beside the skill icon: right to left, left to right, bottom to top, top to bottom, or in place, which briefly swaps out the level and XP/h without moving. Gains that land mid-flight are added to the next one
+- **XP drops** show each gain, like `+175 xp`, beside the skill icon: right to left, left to right, bottom to top, top to bottom, or in place, which briefly swaps out the level and XP/h without moving. Gains that land mid-flight are added to the next one
+- **Pulse** is the drop direction for anyone who would rather not have text moving about: nothing is written, and instead the whole panel — text, bars, progress gradient and the activity icon — brightens the moment XP lands and fades back over a second. It pulses whatever is on screen, including an AFK or low-hitpoints overlay
 
 ### Alerts
 

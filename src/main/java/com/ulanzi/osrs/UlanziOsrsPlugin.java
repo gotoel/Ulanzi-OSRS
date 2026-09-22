@@ -7,6 +7,9 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
@@ -61,6 +64,10 @@ public class UlanziOsrsPlugin extends Plugin
 	private static final Skill[] MELEE_SKILLS = {Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE};
 	private static final Color XP_RATE_COLOR = Color.WHITE;
 	private static final Color XP_DROP_COLOR = Color.WHITE;
+	static final long PULSE_MS = 1_000L;
+	static final double PULSE_PEAK = 1.8;
+	private static final long PULSE_ATTACK_MS = 120L;
+	private static final long PULSE_FRAME_MS = 120L;
 	private static final String CONFIG_VERSION_KEY = "configVersion";
 	private static final int CONFIG_VERSION = 2;
 
@@ -76,6 +83,9 @@ public class UlanziOsrsPlugin extends Plugin
 
 	@Inject
 	private ClientThread clientThread;
+
+	@Inject
+	private ScheduledExecutorService executor;
 
 	@Inject
 	private UlanziConfig config;
@@ -117,6 +127,8 @@ public class UlanziOsrsPlugin extends Plugin
 	private int pendingDropXp;
 	private Skill pendingDropSkill;
 	private long nextDropMs;
+	private volatile long pulseStartMs;
+	private volatile ScheduledFuture<?> pulseFrames;
 	private String inPlaceDropText;
 	private long inPlaceDropUntilMs;
 
@@ -365,13 +377,32 @@ public class UlanziOsrsPlugin extends Plugin
 	 */
 	private void flushXpDrop(boolean panelTaken, boolean progressPage)
 	{
-		if (!config.xpDrops() || panelTaken)
+		if (!config.xpDrops())
 		{
 			pendingDropXp = 0;
 			pendingDropSkill = null;
 			return;
 		}
 		long now = System.currentTimeMillis();
+		// A pulse lights whatever is already on the panel rather than showing anything
+		// of its own, so it runs even when an overlay has taken the panel and it never
+		// waits behind a drop that is still on screen.
+		if (config.xpDropDirection() == XpDropDirection.PULSE)
+		{
+			if (pendingDropXp > 0)
+			{
+				startPulse(now);
+			}
+			pendingDropXp = 0;
+			pendingDropSkill = null;
+			return;
+		}
+		if (panelTaken)
+		{
+			pendingDropXp = 0;
+			pendingDropSkill = null;
+			return;
+		}
 		if (pendingDropXp <= 0 || now < nextDropMs)
 		{
 			return;
@@ -393,6 +424,65 @@ public class UlanziOsrsPlugin extends Plugin
 		nextDropMs = now + shownMs;
 		pendingDropXp = 0;
 		pendingDropSkill = null;
+	}
+
+	/**
+	 * A drop landing during a pulse restarts it instead of stacking another one.
+	 */
+	private void startPulse(long nowMs)
+	{
+		pulseStartMs = nowMs;
+		if (pulseFrames == null || pulseFrames.isDone())
+		{
+			pulseFrames = executor.scheduleWithFixedDelay(this::pulseFrame,
+				PULSE_FRAME_MS, PULSE_FRAME_MS, TimeUnit.MILLISECONDS);
+		}
+	}
+
+	/**
+	 * Game ticks alone would make the pulse a blink, so it is redrawn between them.
+	 * The frame that finds the pulse over is the one that puts the colours back.
+	 */
+	private void pulseFrame()
+	{
+		if (System.currentTimeMillis() - pulseStartMs >= PULSE_MS)
+		{
+			stopPulse();
+		}
+		clientThread.invokeLater(this::refreshClock);
+	}
+
+	private void stopPulse()
+	{
+		ScheduledFuture<?> frames = pulseFrames;
+		pulseFrames = null;
+		if (frames != null)
+		{
+			frames.cancel(false);
+		}
+	}
+
+	/**
+	 * Full brightness on landing, then a fade back to normal across the rest of the
+	 * second. 1.0 means nothing is being scaled.
+	 */
+	static double pulseFactor(long startMs, long nowMs)
+	{
+		if (startMs <= 0L)
+		{
+			return 1.0;
+		}
+		long elapsed = nowMs - startMs;
+		if (elapsed < 0L || elapsed >= PULSE_MS)
+		{
+			return 1.0;
+		}
+		if (elapsed < PULSE_ATTACK_MS)
+		{
+			return PULSE_PEAK;
+		}
+		double fade = (elapsed - PULSE_ATTACK_MS) / (double) (PULSE_MS - PULSE_ATTACK_MS);
+		return 1.0 + (PULSE_PEAK - 1.0) * (1.0 - fade);
 	}
 
 	static String xpDropText(int xp)
@@ -453,6 +543,8 @@ public class UlanziOsrsPlugin extends Plugin
 			AlertDisplayMode mode = chosen == OverlayKind.AFK ? config.afkDisplay() : display;
 			flushXpDrop(chosen != null && mode.usesFullPanel(),
 				chosen == null && activity != null && showsSkillProgress());
+			// Everything pushed below this point is scaled by the pulse.
+			awtrixClient.setPulse(pulseFactor(pulseStartMs, System.currentTimeMillis()));
 			if (chosen != null)
 			{
 				if (afkHeld && !(chosen == OverlayKind.AFK && mode.usesFullPanel()))
@@ -1305,6 +1397,9 @@ public class UlanziOsrsPlugin extends Plugin
 		nextDropMs = 0L;
 		inPlaceDropText = null;
 		inPlaceDropUntilMs = 0L;
+		stopPulse();
+		pulseStartMs = 0L;
+		awtrixClient.setPulse(1.0);
 	}
 
 	private static final class BigStat
