@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import java.awt.Color;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -428,17 +429,38 @@ public class AwtrixClient
 	void pushCompactStats(List<TextFragment> fragments, int hpPercent, Color hpColor, Color background,
 		String activityIcon, int prayerPercent, Color prayerColor, int energyPercent, Color energyColor)
 	{
+		List<ColumnBar> bars = new ArrayList<>();
+		if (prayerPercent >= 0)
+		{
+			bars.add(new ColumnBar(prayerPercent, prayerColor));
+		}
+		if (energyPercent >= 0)
+		{
+			bars.add(new ColumnBar(energyPercent, energyColor));
+		}
+		boolean hpBar = hpPercent >= 0;
+		pushCompactStats(fragments, bars, hpBar ? hpPercent : -1, hpColor, background, activityIcon);
+	}
+
+	void pushCompactStats(List<TextFragment> fragments, List<ColumnBar> bars, Color background, String activityIcon)
+	{
+		pushCompactStats(fragments, bars, -1, null, background, activityIcon);
+	}
+
+	void pushCompactStats(List<TextFragment> fragments, List<ColumnBar> bars, int hpPercent, Color hpColor,
+		Color background, String activityIcon)
+	{
 		JsonObject body = baseStatsApp();
 		body.addProperty("font", "small");
 		body.addProperty("textCenter", true);
 		body.add("scroll", scrollStatic());
 		applyActivityIcon(body, activityIcon);
-		int barCount = (prayerPercent >= 0 ? 1 : 0) + (energyPercent >= 0 ? 1 : 0);
+		int barCount = bars == null ? 0 : bars.size();
 		if (barCount > 0)
 		{
 			// Keep the centered line off the 2px columns at the right edge.
 			body.addProperty("textOffsetX", -2 * barCount);
-			body.add("draw", verticalColumns(prayerPercent, prayerColor, energyPercent, energyColor));
+			body.add("draw", verticalColumns(bars));
 		}
 		if (background != null)
 		{
@@ -461,7 +483,7 @@ public class AwtrixClient
 			body.addProperty("progressColor", toHex(hpColor));
 			body.addProperty("progressTrackColor", "#202020");
 		}
-		if (hpPercent >= 0 || prayerPercent >= 0 || energyPercent >= 0)
+		if (hpPercent >= 0 || barCount > 0)
 		{
 			body.addProperty("textInFront", true);
 		}
@@ -574,20 +596,19 @@ public class AwtrixClient
 	}
 
 	/**
-	 * Prayer sits just left of energy. A single bar uses the right edge.
+	 * Bars are drawn from the right edge, last in the list at the edge.
+	 * Pass them in left-to-right reading order (hitpoints, prayer, energy, spec).
 	 */
-	private static JsonArray verticalColumns(int prayerPercent, Color prayerColor, int energyPercent, Color energyColor)
+	private static JsonArray verticalColumns(List<ColumnBar> bars)
 	{
 		JsonArray draw = new JsonArray();
 		int x = 30;
-		if (energyPercent >= 0)
+		for (int i = bars.size() - 1; i >= 0; i--)
 		{
-			appendVerticalBar(draw, x, energyPercent, energyColor == null ? new Color(0xFF_D4_00) : energyColor);
+			ColumnBar bar = bars.get(i);
+			Color color = bar.color == null ? Color.WHITE : bar.color;
+			appendVerticalBar(draw, x, bar.percent, color);
 			x -= 2;
-		}
-		if (prayerPercent >= 0)
-		{
-			appendVerticalBar(draw, x, prayerPercent, prayerColor == null ? new Color(0x4F_A3_FF) : prayerColor);
 		}
 		return draw;
 	}
@@ -750,5 +771,17 @@ public class AwtrixClient
 	{
 		String text;
 		Color color;
+	}
+
+	static final class ColumnBar
+	{
+		final int percent;
+		final Color color;
+
+		ColumnBar(int percent, Color color)
+		{
+			this.percent = percent;
+			this.color = color;
+		}
 	}
 }

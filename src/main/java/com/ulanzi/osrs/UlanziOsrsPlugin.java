@@ -10,11 +10,15 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.Constants;
 import net.runelite.api.GameState;
+import net.runelite.api.Player;
 import net.runelite.api.Skill;
 import net.runelite.api.VarPlayer;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.StatChanged;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
@@ -67,8 +71,11 @@ public class UlanziOsrsPlugin extends Plugin
 	private int overlayRotateIndex;
 	private OverlayKind currentOverlay;
 	private boolean compactFlashOn;
+	private boolean afkHeld;
 	private final SkillActivityTracker activityTracker = new SkillActivityTracker();
 	private final EnumMap<Skill, Integer> skillXp = new EnumMap<>(Skill.class);
+	private WorldPoint lastPlayerLocation;
+	private long lastCombatMs;
 
 	@Override
 	protected void startUp()
@@ -113,6 +120,14 @@ public class UlanziOsrsPlugin extends Plugin
 			return;
 		}
 
+		if ("afkEnabled".equals(event.getKey()) && !"true".equals(event.getNewValue()))
+		{
+			awtrixClient.dismissAfk();
+			afkHeld = false;
+			afkActive = false;
+			lastAfkSentMs = 0L;
+		}
+
 		awtrixClient.clearCache();
 		afkActive = false;
 		lastAfkSentMs = 0L;
@@ -121,6 +136,7 @@ public class UlanziOsrsPlugin extends Plugin
 		nextOverlayRotateMs = 0L;
 		overlayRotateIndex = 0;
 		currentOverlay = null;
+		refreshClock();
 	}
 
 	@Subscribe
@@ -150,6 +166,11 @@ public class UlanziOsrsPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
+		refreshClock();
+	}
+
+	private void refreshClock()
+	{
 		if (client.getGameState() != GameState.LOGGED_IN || client.getLocalPlayer() == null)
 		{
 			return;
@@ -168,6 +189,13 @@ public class UlanziOsrsPlugin extends Plugin
 			boolean lowPray = config.lowPrayerEnabled() && prayer <= config.lowPrayerThreshold();
 			SkillActivity activity = currentActivity();
 			boolean afk = config.afkEnabled() && isAfk();
+			if (!afk && afkHeld)
+			{
+				awtrixClient.dismissAfk();
+				afkHeld = false;
+				afkActive = false;
+				lastAfkSentMs = 0L;
+			}
 			AlertDisplayMode display = config.alertDisplayMode();
 
 			fireThresholdPulses(hitpoints, prayer, lowHp, lowPray, display);
@@ -354,6 +382,7 @@ public class UlanziOsrsPlugin extends Plugin
 		{
 			case AFK:
 			{
+				afkHeld = true;
 				long now = System.currentTimeMillis();
 				boolean entering = !afkActive;
 				long reassertMs = config.afkEffect().usesSideEyes() ? AFK_EYES_REASSERT_MS : AFK_REASSERT_MS;
@@ -389,6 +418,7 @@ public class UlanziOsrsPlugin extends Plugin
 	{
 		// Never leave a full-panel AFK notification up in stats/compact alert mode.
 		awtrixClient.dismissAfk();
+		afkHeld = false;
 
 		switch (kind)
 		{
@@ -499,13 +529,15 @@ public class UlanziOsrsPlugin extends Plugin
 
 		if (focus == OverlayKind.LOW_HP && config.statsLayout() == StatsLayout.BIG)
 		{
-			awtrixClient.pushBigStat("", String.valueOf(hitpoints), hpColor, hpPercent,
+			int progress = config.hitpointsStyle().showsBar() ? hpPercent : -1;
+			awtrixClient.pushBigStat("", String.valueOf(hitpoints), hpColor, progress,
 				tintMode.tintsValues() ? tint : Color.RED, afkBackground, activityIcon);
 			return;
 		}
 		if (focus == OverlayKind.LOW_PRAYER && config.statsLayout() == StatsLayout.BIG)
 		{
-			awtrixClient.pushBigStat("", String.valueOf(prayer), prayColor, -1,
+			int progress = config.prayerStyle().showsBar() ? prayerPercent : -1;
+			awtrixClient.pushBigStat("", String.valueOf(prayer), prayColor, progress,
 				tintMode.tintsValues() ? tint : Color.BLACK, afkBackground, activityIcon);
 			return;
 		}
@@ -514,6 +546,7 @@ public class UlanziOsrsPlugin extends Plugin
 			|| focus == OverlayKind.LOW_HP || focus == OverlayKind.LOW_PRAYER)
 		{
 			List<AwtrixClient.TextFragment> fragments = new ArrayList<>();
+			List<AwtrixClient.ColumnBar> bars = new ArrayList<>();
 			boolean first = true;
 
 			if (focus == OverlayKind.AFK && config.afkCompactLabel())
@@ -526,66 +559,55 @@ public class UlanziOsrsPlugin extends Plugin
 				first = false;
 			}
 
-			if (config.showHitpoints() || focus == OverlayKind.LOW_HP)
+			Color hpDraw = flashHp ? hpColor : barColor;
+			boolean routine = focus == null || focus == OverlayKind.AFK;
+			first = appendCompactStat(fragments, bars, config.showHitpoints() || focus == OverlayKind.LOW_HP,
+				config.hitpointsStyle(), hitpoints, hpPercent, hpDraw, spaceColor, first);
+			first = appendCompactStat(fragments, bars, config.showPrayer() || focus == OverlayKind.LOW_PRAYER,
+				config.prayerStyle(), prayer, prayerPercent, prayColor, spaceColor, first);
+			if (routine)
 			{
-				if (!first)
-				{
-					fragments.add(new AwtrixClient.TextFragment(" ", spaceColor));
-				}
-				fragments.add(new AwtrixClient.TextFragment(String.valueOf(hitpoints), hpColor));
-				first = false;
-			}
-			boolean prayerColumn = config.showPrayer() || focus == OverlayKind.LOW_PRAYER;
-			boolean energyColumn = false;
-			if (focus == null || focus == OverlayKind.AFK)
-			{
-				if (config.showEnergy())
-				{
-					energyColumn = true;
-				}
-				if (config.showSpec())
-				{
-					if (!first)
-					{
-						fragments.add(new AwtrixClient.TextFragment(" ", spaceColor));
-					}
-					fragments.add(new AwtrixClient.TextFragment(String.valueOf(spec), specColor));
-				}
+				first = appendCompactStat(fragments, bars, config.showEnergy(),
+					config.energyStyle(), energy, energy, energyColor, spaceColor, first);
+				appendCompactStat(fragments, bars, config.showSpec(),
+					config.specStyle(), spec, spec, specColor, spaceColor, first);
 			}
 
-			if (fragments.isEmpty() && activity != null)
+			if (fragments.isEmpty() && activity != null && bars.isEmpty())
 			{
 				fragments.add(new AwtrixClient.TextFragment(activity.label(), activity.color()));
 			}
-			if (fragments.isEmpty() && !energyColumn && !prayerColumn)
+			if (fragments.isEmpty() && bars.isEmpty())
 			{
 				awtrixClient.clearStats();
 				return;
 			}
 
-			boolean showBar = config.showHitpoints() || focus == OverlayKind.LOW_HP;
-			awtrixClient.pushCompactStats(fragments, showBar ? hpPercent : -1, barColor, afkBackground, activityIcon,
-				prayerColumn ? prayerPercent : -1, prayColor, energyColumn ? energy : -1, energyColor);
+			awtrixClient.pushCompactStats(fragments, bars, afkBackground, activityIcon);
 			return;
 		}
 
 		List<BigStat> stats = new ArrayList<>();
 		if (config.showHitpoints())
 		{
-			stats.add(new BigStat(String.valueOf(hitpoints), hpColor, hpPercent, hpColor));
+			int progress = config.hitpointsStyle().showsBar() ? hpPercent : -1;
+			stats.add(new BigStat(String.valueOf(hitpoints), hpColor, progress, hpColor));
 		}
 		if (config.showPrayer())
 		{
-			stats.add(new BigStat(String.valueOf(prayer), prayColor, -1,
+			int progress = config.prayerStyle().showsBar() ? prayerPercent : -1;
+			stats.add(new BigStat(String.valueOf(prayer), prayColor, progress,
 				tintMode.tintsValues() ? tint : Color.BLACK));
 		}
 		if (config.showEnergy())
 		{
-			stats.add(new BigStat(String.valueOf(energy), energyColor, energy, energyColor));
+			int progress = config.energyStyle().showsBar() ? energy : -1;
+			stats.add(new BigStat(String.valueOf(energy), energyColor, progress, energyColor));
 		}
 		if (config.showSpec())
 		{
-			stats.add(new BigStat(String.valueOf(spec), specColor, spec, specColor));
+			int progress = config.specStyle().showsBar() ? spec : -1;
+			stats.add(new BigStat(String.valueOf(spec), specColor, progress, specColor));
 		}
 
 		if (stats.isEmpty())
@@ -620,6 +642,29 @@ public class UlanziOsrsPlugin extends Plugin
 		awtrixClient.pushBigStat("", current.value, current.color, current.progress, current.progressColor, afkBackground, activityIcon);
 	}
 
+	private boolean appendCompactStat(List<AwtrixClient.TextFragment> fragments, List<AwtrixClient.ColumnBar> bars,
+		boolean show, StatStyle style, int value, int percent, Color color, Color spaceColor, boolean first)
+	{
+		if (!show)
+		{
+			return first;
+		}
+		if (style.showsBar())
+		{
+			bars.add(new AwtrixClient.ColumnBar(percent, color));
+		}
+		if (!style.showsValue())
+		{
+			return first;
+		}
+		if (!first)
+		{
+			fragments.add(new AwtrixClient.TextFragment(" ", spaceColor));
+		}
+		fragments.add(new AwtrixClient.TextFragment(String.valueOf(value), color));
+		return false;
+	}
+
 	private void pushActivityLabel(SkillActivity activity, Color background)
 	{
 		List<AwtrixClient.TextFragment> label = new ArrayList<>();
@@ -629,22 +674,82 @@ public class UlanziOsrsPlugin extends Plugin
 
 	private SkillActivity currentActivity()
 	{
-		if (!config.showActivity() || client.getLocalPlayer() == null)
+		Player player = client.getLocalPlayer();
+		if (!config.showActivity() || player == null)
 		{
 			activityTracker.reset();
+			lastCombatMs = 0L;
 			return null;
 		}
-		int animation = client.getLocalPlayer().getAnimation();
-		return activityTracker.onAnimation(SkillActivities.fromAnimation(animation), animation, System.currentTimeMillis());
+
+		long now = System.currentTimeMillis();
+		long holdMs = activityHoldMs();
+		int animation = player.getAnimation();
+		SkillActivity fromAnimation = SkillActivities.fromAnimation(animation);
+		SkillActivity skill = activityTracker.onAnimation(fromAnimation, animation, now, holdMs);
+		if (skill != null)
+		{
+			return skill;
+		}
+		if (isDialogOpen())
+		{
+			return null;
+		}
+
+		boolean interacting = player.getInteracting() != null;
+		boolean attackAnimation = fromAnimation == null && animation != -1 && interacting;
+		if (attackAnimation)
+		{
+			lastCombatMs = now;
+		}
+		if (!inCombatHold(interacting, lastCombatMs, now, holdMs))
+		{
+			return null;
+		}
+		return CombatStyles.current(client);
+	}
+
+	/**
+	 * Combat icon stays while you still have a target. A hold of 0 keeps it for
+	 * the whole fight; a positive hold drops it if you have not attacked recently.
+	 */
+	static boolean inCombatHold(boolean interacting, long lastCombatMs, long nowMs, long holdMs)
+	{
+		if (!interacting || lastCombatMs <= 0L)
+		{
+			return false;
+		}
+		return holdMs <= 0L || nowMs - lastCombatMs < holdMs;
+	}
+
+	private long activityHoldMs()
+	{
+		return Math.max(0, config.activityHoldSeconds()) * 1000L;
+	}
+
+	private boolean isDialogOpen()
+	{
+		return visible(WidgetInfo.DIALOG_NPC_TEXT)
+			|| visible(WidgetInfo.DIALOG_PLAYER_TEXT)
+			|| visible(WidgetInfo.DIALOG_OPTION_OPTIONS);
+	}
+
+	private boolean visible(WidgetInfo info)
+	{
+		Widget widget = client.getWidget(info);
+		return widget != null && !widget.isHidden();
 	}
 
 	/**
 	 * Standing still with no action animation. Walk, run, and any chop/attack/skilling
 	 * animation are not idle. Idle turn poses still count as standing.
+	 * The default run animation is 824, which some players also report as an idle-turn id,
+	 * so movement poses are excluded before the idle-turn check.
 	 */
-	static boolean isStandingIdle(int actionAnimation, int poseAnimation, int idlePose, int idleRotateLeft, int idleRotateRight)
+	static boolean isStandingIdle(int actionAnimation, int poseAnimation, int idlePose, int idleRotateLeft, int idleRotateRight,
+		int walk, int walkBack, int walkLeft, int walkRight, int run)
 	{
-		if (actionAnimation != -1)
+		if (actionAnimation != -1 || isMovementPose(poseAnimation, walk, walkBack, walkLeft, walkRight, run))
 		{
 			return false;
 		}
@@ -652,6 +757,25 @@ public class UlanziOsrsPlugin extends Plugin
 			|| poseAnimation == idlePose
 			|| poseAnimation == idleRotateLeft
 			|| poseAnimation == idleRotateRight;
+	}
+
+	static boolean isMovementPose(int poseAnimation, int walk, int walkBack, int walkLeft, int walkRight, int run)
+	{
+		return poseAnimation != -1
+			&& (poseAnimation == walk
+				|| poseAnimation == walkBack
+				|| poseAnimation == walkLeft
+				|| poseAnimation == walkRight
+				|| poseAnimation == run);
+	}
+
+	/**
+	 * Idle only while standing with no click-to-move destination and no tile change.
+	 * A destination is set as soon as the character is told to move, before the run pose starts.
+	 */
+	static boolean isCharacterIdle(boolean standingIdle, boolean hasMoveDestination, boolean locationChanged)
+	{
+		return standingIdle && !hasMoveDestination && !locationChanged;
 	}
 
 	/**
@@ -669,13 +793,30 @@ public class UlanziOsrsPlugin extends Plugin
 
 	private boolean isAfk()
 	{
-		boolean characterIdle = client.getLocalPlayer() == null
-			|| isStandingIdle(
-				client.getLocalPlayer().getAnimation(),
-				client.getLocalPlayer().getPoseAnimation(),
-				client.getLocalPlayer().getIdlePoseAnimation(),
-				client.getLocalPlayer().getIdleRotateLeft(),
-				client.getLocalPlayer().getIdleRotateRight());
+		Player player = client.getLocalPlayer();
+		if (player == null)
+		{
+			return false;
+		}
+
+		WorldPoint here = player.getWorldLocation();
+		boolean locationChanged = lastPlayerLocation != null && !lastPlayerLocation.equals(here);
+		lastPlayerLocation = here;
+
+		boolean characterIdle = isCharacterIdle(
+			isStandingIdle(
+				player.getAnimation(),
+				player.getPoseAnimation(),
+				player.getIdlePoseAnimation(),
+				player.getIdleRotateLeft(),
+				player.getIdleRotateRight(),
+				player.getWalkAnimation(),
+				player.getWalkRotate180(),
+				player.getWalkRotateLeft(),
+				player.getWalkRotateRight(),
+				player.getRunAnimation()),
+			client.getLocalDestinationLocation() != null,
+			locationChanged);
 		if (!characterIdle)
 		{
 			return false;
@@ -739,8 +880,11 @@ public class UlanziOsrsPlugin extends Plugin
 		overlayRotateIndex = 0;
 		currentOverlay = null;
 		compactFlashOn = false;
+		afkHeld = false;
 		activityTracker.reset();
 		skillXp.clear();
+		lastPlayerLocation = null;
+		lastCombatMs = 0L;
 	}
 
 	private static final class BigStat

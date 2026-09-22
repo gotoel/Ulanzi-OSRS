@@ -3,189 +3,210 @@ package com.ulanzi.osrs;
 import java.awt.Color;
 
 /**
- * A skilling activity the clock can show an icon for.
- * Combat skills are intentionally absent: their animations are not skilling.
+ * A skilling or combat activity the clock can show an icon for.
+ * Melee and ranged are chosen from the attack style while fighting.
+ * Magic uses the same icon for spells and for the magic attack style.
  */
 enum SkillActivity
 {
 	WOODCUTTING("Wood", 0x3C_B4_3C, new String[] {
+		"........",
 		"..GGGG..",
-		".GggggG.",
-		"GggggggG",
 		".GGGGGG.",
-		"...TT...",
-		"...TT...",
-		"...TT...",
-		"..TTTT.."
-	}),
-	MINING("Mine", 0xC8_C8_C8, new String[] {
-		"......SS",
-		".....SS.",
-		"....SS..",
-		"...TT...",
-		"..TT....",
-		".TT.....",
-		"TT......",
-		"........"
-	}),
-	FISHING("Fish", 0x3D_7E_FF, new String[] {
-		"........",
-		"...BBBB.",
-		"..BBBBWB",
-		".BBBBBBB",
-		"..BBBBBB",
-		"...BB...",
-		"........",
-		"........"
-	}),
-	HUNTER("Hunt", 0x8B_5A_2B, new String[] {
-		"TTT..TTT",
-		"T......T",
-		"T.Y..Y.T",
-		"T......T",
-		"T......T",
-		"T.Y..Y.T",
-		"T......T",
-		"TTT..TTT"
-	}),
-	AGILITY("Agil", 0xFF_D5_4A, new String[] {
-		"....YY..",
-		"...YY...",
-		"..YY....",
-		".YYYYYY.",
-		"....YY..",
-		"...YY...",
-		"..YY....",
-		".YY....."
-	}),
-	THIEVING("Thief", 0xFF_C1_07, new String[] {
-		"..AAAA..",
-		".A....A.",
-		"A..AA..A",
-		"A.AAAA.A",
-		"A.AAAA.A",
-		"A..AA..A",
-		".A....A.",
-		"..AAAA.."
-	}),
-	FARMING("Farm", 0x3C_B4_3C, new String[] {
-		"...gG...",
-		"..G.G...",
-		".G.GG.G.",
-		"...TT...",
+		".GggggG.",
+		"..GggG..",
 		"...TT...",
 		"..TTTT..",
-		".TTTTTT.",
 		"........"
 	}),
-	RUNECRAFT("RC", 0x26_C6_DA, new String[] {
-		".CCCCCC.",
-		"C......C",
-		"C.CCCC.C",
-		"C.C..C.C",
-		"C.CCCC.C",
-		"C......C",
-		".CCCCCC.",
+	MINING("Mine", 0xC8_C8_C8, new String[] {
+		"........",
+		".SSSS...",
+		".....S..",
+		"....T.S.",
+		"...T..s.",
+		"..T.....",
+		".T......",
+		"........"
+	}),
+	FISHING("Fish", 0x9C_C0_E0, new String[] {
+		"........",
+		"........",
+		"..FFF.F.",
+		".F.FFFF.",
+		".FFFFFF.",
+		"..FFF.F.",
+		"........",
+		"........"
+	}),
+	HUNTER("Hunt", 0xC8_90_5A, new String[] {
+		"........",
+		"..L..L..",
+		".L....L.",
+		"...LL...",
+		"..LLLL..",
+		"..LLLL..",
+		"...LL...",
+		"........"
+	}),
+	AGILITY("Agil", 0xFF_FF_FF, new String[] {
+		"........",
+		".....W..",
+		"...WWW..",
+		"..W.WWW.",
+		"...WW...",
+		"..W..W..",
+		".W...W..",
+		"........"
+	}),
+	THIEVING("Thief", 0x8C_84_A8, new String[] {
+		"........",
+		"........",
+		".MMMMMM.",
+		".M.MM.M.",
+		".MMMMMM.",
+		".MM..MM.",
+		"........",
+		"........"
+	}),
+	FARMING("Farm", 0x3C_B4_3C, new String[] {
+		"........",
+		"....sss.",
+		".S.s..s.",
+		"..SBBSS.",
+		"...SSSS.",
+		"...SSSS.",
+		"...ssss.",
+		"........"
+	}),
+	RUNECRAFT("RC", 0xFF_8C_1A, new String[] {
+		"........",
+		"..sSSs..",
+		".sSOSSs.",
+		".SSSRSS.",
+		".SSRSSS.",
+		".sSSOSs.",
+		"..sSSs..",
 		"........"
 	}),
 	CONSTRUCTION("Cons", 0xC8_C8_C8, new String[] {
-		"..SSSS..",
-		"...SS...",
-		"...TT...",
-		"...TT...",
-		"...TT...",
-		"...TT...",
-		"..TTTT..",
+		"........",
+		"....TTT.",
+		"....T.T.",
+		"...SSTT.",
+		"..SSS...",
+		".SSs....",
+		".s.s....",
 		"........"
 	}),
-	COOKING("Cook", 0xFF_8C_1A, new String[] {
-		"...YY...",
-		"..YRR...",
-		"...YY...",
-		"..OOOO..",
-		".OOOOOO.",
-		".OOOOOO.",
-		"..OOOO..",
+	COOKING("Cook", 0xFF_D5_4A, new String[] {
+		"........",
+		"..W..W..",
+		"...W..W.",
+		".AAAAAA.",
+		".AYYYYA.",
+		".AYYYYA.",
+		"..AAAA..",
 		"........"
 	}),
 	FIREMAKING("Fire", 0xE5_39_35, new String[] {
-		"...RR...",
-		"..ROOR..",
-		".RYYYR..",
-		"..YYYY..",
-		".RYYYYR.",
-		"..RRRR..",
-		"...RR...",
+		"........",
+		"..R..R..",
+		".RYR.RR.",
+		".RYYRYR.",
+		"..OYYO..",
+		".TT..TT.",
+		"...TT...",
 		"........"
 	}),
 	SMITHING("Smith", 0xC8_C8_C8, new String[] {
 		"........",
-		".SSSS...",
-		"SSSSSS..",
-		".SSSSS..",
-		"..TTT...",
-		"..TTT...",
-		".TTTTT..",
+		".SSSSSS.",
+		"..SSSSs.",
+		"....S...",
+		"...sss..",
+		"..ssss..",
+		"........",
 		"........"
 	}),
-	FLETCHING("Flet", 0xFF_D5_4A, new String[] {
-		".....YY.",
-		"....YYYY",
-		"...TT...",
-		"...TT...",
-		"...TT...",
-		"...TT...",
-		"...AA...",
-		"...AA..."
+	FLETCHING("Flet", 0x3C_B4_3C, new String[] {
+		"........",
+		"....SSS.",
+		".....SS.",
+		"....T.S.",
+		".G.T....",
+		".GT.....",
+		".GGG....",
+		"........"
 	}),
-	CRAFTING("Craft", 0x9C_27_B0, new String[] {
-		"...PP...",
-		"..PPPP..",
-		".PPWWPP.",
-		"PPPPPPPP",
-		".PPPPPP.",
-		"..PPPP..",
-		"...PP...",
+	CRAFTING("Craft", 0xC8_C8_C8, new String[] {
+		"........",
+		".S...SS.",
+		"..S.SSS.",
+		"...S.S..",
+		"...TT...",
+		"..T..T..",
+		".T....T.",
 		"........"
 	}),
 	HERBLORE("Herb", 0x3C_B4_3C, new String[] {
-		"...WW...",
-		"...GG...",
-		"..GGGG..",
-		"..GGGG..",
-		"..GGGG..",
-		"..GGGG..",
-		"...GG...",
-		"..GGGG.."
+		"........",
+		"...g....",
+		"..Gg.G..",
+		".G.gGG..",
+		".GGgG...",
+		"..Gg....",
+		"...t....",
+		"........"
 	}),
-	PRAYER("Pray", 0xFF_D5_4A, new String[] {
-		"...YY...",
-		"...YY...",
-		".YYYYYY.",
-		"..YYYY..",
-		"...YY...",
-		"..Y..Y..",
-		".Y....Y.",
+	PRAYER("Pray", 0xFF_F1_B8, new String[] {
+		"........",
+		"...W....",
+		"..EWE...",
+		".WWWWW..",
+		"..EWE...",
+		"...W....",
+		"........",
 		"........"
 	}),
 	MAGIC("Mage", 0x3D_7E_FF, new String[] {
-		"...BB...",
-		"..B..B..",
-		".B.WW.B.",
-		"..B..B..",
-		"...BB...",
-		"..B..B..",
-		".B....B.",
+		"........",
+		".....B..",
+		"....BB..",
+		"...BBB..",
+		"..bYYb..",
+		".BBBBBB.",
+		"........",
 		"........"
 	}),
-	SAILING("Sail", 0x3D_7E_FF, new String[] {
-		"...WW...",
-		"...WW...",
-		"...WW...",
-		".BBBBBB.",
-		"BBBBBBBB",
-		".BBBBBB.",
-		"..BBBB..",
+	SAILING("Sail", 0xC8_C8_C8, new String[] {
+		"........",
+		"...S....",
+		"..SSS...",
+		"...S....",
+		"...S....",
+		".S.S.S..",
+		"..SSS...",
+		"........"
+	}),
+	MELEE("Melee", 0xE0_E0_E0, new String[] {
+		"........",
+		"......S.",
+		".....S..",
+		"..Y.S...",
+		"...Y....",
+		"..T.Y...",
+		".Y......",
+		"........"
+	}),
+	RANGED("Range", 0x8B_C3_4A, new String[] {
+		"........",
+		"..TT....",
+		"..s.T...",
+		"..s..T..",
+		".GTTTTS.",
+		"..s.T...",
+		"..TT....",
 		"........"
 	});
 

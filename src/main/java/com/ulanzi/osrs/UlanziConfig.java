@@ -100,7 +100,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "afkEnabled",
 		name = "AFK indicator",
-		description = "Take over the whole display when you go idle. Once it is up, it stays until your character stops idling. Moving the mouse does not dismiss it.",
+		description = "Take over the whole display when you go idle. Walking, running, or clicking to move clears it. Moving the mouse does not.",
 		position = 0,
 		section = afkSection
 	)
@@ -120,7 +120,7 @@ public interface UlanziConfig extends Config
 	@Units(Units.SECONDS)
 	default int afkSeconds()
 	{
-		return 0;
+		return 5;
 	}
 
 	@ConfigItem(
@@ -273,7 +273,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "statsLayout",
 		name = "Layout",
-		description = "Big shows one large stat at a time. Compact packs values on one line with an HP bar and vertical prayer and energy bars.",
+		description = "Big shows one large stat at a time. Compact shows each stat as a number or a vertical bar.",
 		position = 1,
 		section = statsSection
 	)
@@ -295,10 +295,22 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "hitpointsStyle",
+		name = "Hitpoints as",
+		description = "Compact layout: Value prints the number, Bar draws a vertical bar, and Both shows the number and the bar.",
+		position = 3,
+		section = statsSection
+	)
+	default StatStyle hitpointsStyle()
+	{
+		return StatStyle.VALUE;
+	}
+
+	@ConfigItem(
 		keyName = "showPrayer",
 		name = "Prayer",
-		description = "Include prayer on the stats page. Compact layout draws it as a vertical bar, just left of run energy when that bar is also on.",
-		position = 3,
+		description = "Include prayer on the stats page.",
+		position = 4,
 		section = statsSection
 	)
 	default boolean showPrayer()
@@ -307,10 +319,22 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "prayerStyle",
+		name = "Prayer as",
+		description = "Compact layout: Value prints the number, Bar draws a vertical bar, and Both shows the number and the bar.",
+		position = 5,
+		section = statsSection
+	)
+	default StatStyle prayerStyle()
+	{
+		return StatStyle.VALUE;
+	}
+
+	@ConfigItem(
 		keyName = "showEnergy",
 		name = "Run energy",
-		description = "Include run energy on the stats page. Compact layout draws it as a vertical bar at the right edge so the activity icon does not push it off screen.",
-		position = 4,
+		description = "Include run energy on the stats page.",
+		position = 6,
 		section = statsSection
 	)
 	default boolean showEnergy()
@@ -319,10 +343,22 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "energyStyle",
+		name = "Run energy as",
+		description = "Compact layout: Value prints the number, Bar draws a vertical bar, and Both shows the number and the bar.",
+		position = 7,
+		section = statsSection
+	)
+	default StatStyle energyStyle()
+	{
+		return StatStyle.VALUE;
+	}
+
+	@ConfigItem(
 		keyName = "showSpec",
 		name = "Special attack",
 		description = "Include special-attack percent on the stats page.",
-		position = 5,
+		position = 8,
 		section = statsSection
 	)
 	default boolean showSpec()
@@ -331,10 +367,22 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "specStyle",
+		name = "Special attack as",
+		description = "Compact layout: Value prints the number, Bar draws a vertical bar, and Both shows the number and the bar.",
+		position = 9,
+		section = statsSection
+	)
+	default StatStyle specStyle()
+	{
+		return StatStyle.VALUE;
+	}
+
+	@ConfigItem(
 		keyName = "statsRotateSeconds",
 		name = "Rotate every",
 		description = "How long each big-layout stat stays on screen before rotating.",
-		position = 6,
+		position = 10,
 		section = statsSection
 	)
 	@Range(min = 1, max = 30)
@@ -348,7 +396,7 @@ public interface UlanziConfig extends Config
 		keyName = "compactFlashLowHp",
 		name = "Always flash low HP on compact",
 		description = "When using compact layout, flash HP digits while low even if Alert display is Full panel only.",
-		position = 7,
+		position = 11,
 		section = statsSection
 	)
 	default boolean compactFlashLowHp()
@@ -359,8 +407,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "compactFlashLowPrayer",
 		name = "Always flash low prayer on compact",
-		description = "When using compact layout, flash the prayer bar while low even if Alert display is Full panel only.",
-		position = 8,
+		description = "When using compact layout, flash prayer while low even if Alert display is Full panel only.",
+		position = 12,
 		section = statsSection
 	)
 	default boolean compactFlashLowPrayer()
@@ -371,13 +419,27 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "showActivity",
 		name = "Activity icon",
-		description = "Show that skill's icon while you are skilling (chopping, mining, fishing, and the other non-combat skills). It stays up during the action and for a few seconds between nodes. If stats are disabled, the icon and a short name are shown on their own.",
-		position = 9,
+		description = "Show an icon while skilling, and a melee, ranged, or magic icon while you are attacking with that style.",
+		position = 13,
 		section = statsSection
 	)
 	default boolean showActivity()
 	{
 		return true;
+	}
+
+	@ConfigItem(
+		keyName = "activityHoldSeconds",
+		name = "Activity hold",
+		description = "Seconds to keep the icon after the action stops. 0 clears it on the next tick. Increase it if walking between trees or rocks makes the icon flicker.",
+		position = 14,
+		section = statsSection
+	)
+	@Range(min = 0, max = 30)
+	@Units(Units.SECONDS)
+	default int activityHoldSeconds()
+	{
+		return 0;
 	}
 
 	@ConfigItem(

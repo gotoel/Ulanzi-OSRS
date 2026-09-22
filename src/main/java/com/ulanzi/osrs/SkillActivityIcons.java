@@ -66,24 +66,34 @@ final class SkillActivityIcons
 				return 0x1B5E20;
 			case 'T':
 				return 0x8B5A2B;
+			case 't':
+				return 0x5A3A1A;
+			case 'L':
+				return 0xC8905A;
 			case 'B':
 				return 0x3D7EFF;
+			case 'b':
+				return 0x1E3C9E;
+			case 'F':
+				return 0x9CC0E0;
 			case 'W':
 				return 0xFFFFFF;
+			case 'E':
+				return 0xFFF1B8;
 			case 'O':
 				return 0xFF8C1A;
 			case 'R':
 				return 0xE53935;
 			case 'Y':
 				return 0xFFD54A;
+			case 'A':
+				return 0xC8961E;
 			case 'S':
 				return 0xC8C8C8;
-			case 'A':
-				return 0xFFC107;
-			case 'P':
-				return 0xAB47BC;
-			case 'C':
-				return 0x26C6DA;
+			case 's':
+				return 0x707070;
+			case 'M':
+				return 0x8C84A8;
 			default:
 				throw new IllegalArgumentException("Unknown icon pixel '" + pixel + "'");
 		}
