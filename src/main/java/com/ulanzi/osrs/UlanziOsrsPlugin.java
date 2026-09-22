@@ -27,6 +27,7 @@ import net.runelite.client.chat.ChatColorType;
 import net.runelite.client.chat.ChatMessageBuilder;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
@@ -72,6 +73,9 @@ public class UlanziOsrsPlugin extends Plugin
 
 	@Inject
 	private Client client;
+
+	@Inject
+	private ClientThread clientThread;
 
 	@Inject
 	private UlanziConfig config;
@@ -233,14 +237,20 @@ public class UlanziOsrsPlugin extends Plugin
 		}
 
 		awtrixClient.clearCache();
-		afkActive = false;
-		lastAfkSentMs = 0L;
-		bigStatIndex = 0;
-		nextRotateMs = 0L;
-		nextOverlayRotateMs = 0L;
-		overlayRotateIndex = 0;
-		currentOverlay = null;
-		refreshClock();
+		// This runs on the Swing thread. Everything below reads client state, so it
+		// has to be handed to the client thread; touching the client from here trips
+		// an assertion that escapes the config panel and leaves its controls stuck.
+		clientThread.invokeLater(() ->
+		{
+			afkActive = false;
+			lastAfkSentMs = 0L;
+			bigStatIndex = 0;
+			nextRotateMs = 0L;
+			nextOverlayRotateMs = 0L;
+			overlayRotateIndex = 0;
+			currentOverlay = null;
+			refreshClock();
+		});
 	}
 
 	@Subscribe
@@ -407,13 +417,13 @@ public class UlanziOsrsPlugin extends Plugin
 
 	private void refreshClock()
 	{
-		if (client.getGameState() != GameState.LOGGED_IN || client.getLocalPlayer() == null)
-		{
-			return;
-		}
-
 		try
 		{
+			if (client.getGameState() != GameState.LOGGED_IN || client.getLocalPlayer() == null)
+			{
+				return;
+			}
+
 			int hitpoints = client.getBoostedSkillLevel(Skill.HITPOINTS);
 			int hitpointsMax = client.getRealSkillLevel(Skill.HITPOINTS);
 			int prayer = client.getBoostedSkillLevel(Skill.PRAYER);
