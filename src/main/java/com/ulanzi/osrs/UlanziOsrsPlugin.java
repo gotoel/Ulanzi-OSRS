@@ -529,7 +529,9 @@ public class UlanziOsrsPlugin extends Plugin
 			int energy = Math.min(100, Math.max(0, client.getEnergy() / 100));
 			int spec = Math.min(100, Math.max(0, client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT) / 10));
 
-			awtrixClient.setPulse(currentPulse(System.currentTimeMillis()));
+			// Threshold alerts are pushed below, before the page is picked, and are
+			// there to be noticed, so they never take the pulse's resting dim.
+			awtrixClient.setPulse(1.0);
 
 			ThresholdUnit unit = config.thresholdUnit();
 			boolean lowHp = config.lowHitpointsEnabled()
@@ -553,8 +555,9 @@ public class UlanziOsrsPlugin extends Plugin
 			AlertDisplayMode mode = chosen == OverlayKind.AFK ? config.afkDisplay() : display;
 			flushXpDrop(chosen != null && mode.usesFullPanel(),
 				chosen == null && activity != null && showsSkillProgress());
-			// Again, in case a drop landed this tick and moved the pulse.
-			awtrixClient.setPulse(currentPulse(System.currentTimeMillis()));
+			// The pulse only shades the ordinary page. An overlay has taken the panel
+			// to tell you something, so it stays at full brightness.
+			awtrixClient.setPulse(chosen != null ? 1.0 : currentPulse(System.currentTimeMillis()));
 			if (chosen != null)
 			{
 				if (afkHeld && !(chosen == OverlayKind.AFK && mode.usesFullPanel()))

@@ -466,7 +466,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "xpDropDirection",
 		name = "XP drop direction",
-		description = "Which way XP drops travel across the panel. In place does not move: on the skill progress page it briefly replaces the level and XP/h, elsewhere it shows still for a moment. Pulse shows no text at all: the panel rests dimmed and everything on it snaps to full colour when XP lands, then fades back over a second. Resting dim is what gives white anything to brighten from.",
+		description = "Which way XP drops travel across the panel. In place does not move: on the skill progress page it briefly replaces the level and XP/h, elsewhere it shows still for a moment. Pulse shows no text at all: the panel rests dimmed and everything on it snaps to full colour when XP lands, then fades back over a second. Resting dim is what gives white anything to brighten from. Alerts and the AFK display are never dimmed.",
 		position = 6,
 		section = skillProgressSection
 	)
