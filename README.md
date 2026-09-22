@@ -86,7 +86,7 @@ If the clock stops answering while you play, the plugin says so in the game chat
 - The bottom row fills toward the next level with a gradient: the skill's color, red to green, or rainbow
 - Combat keeps hitpoints and prayer up unless **Also in combat** is on; melee follows whichever of Attack, Strength or Defence the XP goes to
 - **XP drops** show each gain, like `+175 xp`, beside the skill icon: right to left, left to right, bottom to top, top to bottom, or in place, which briefly swaps out the level and XP/h without moving. Gains that land mid-flight are added to the next one
-- **Pulse** is the drop direction for anyone who would rather not have text moving about: nothing is written, and instead the whole panel — text, bars, progress gradient and the activity icon — brightens the moment XP lands and fades back over a second. It pulses whatever is on screen, including an AFK or low-hitpoints overlay
+- **Pulse** is the drop direction for anyone who would rather not have text moving about: nothing is written, and instead the whole panel — text, bars, progress gradient and the activity icon — snaps to full colour the moment XP lands and fades back over a second. Between drops the panel rests dimmed, which is what gives white anything to brighten from: white is already at full, so there is no headroom above it. It pulses whatever is on screen, including an AFK or low-hitpoints overlay, and the resting dim applies to those too
 
 ### Alerts
 

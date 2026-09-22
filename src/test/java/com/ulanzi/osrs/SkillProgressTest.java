@@ -70,30 +70,66 @@ public class SkillProgressTest
 	}
 
 	@Test
-	public void thePulseIsFullBrightOnLandingAndFadesBack()
+	public void thePulseIsFullBrightOnLandingAndFadesToRest()
 	{
 		long start = 10_000L;
 		Assert.assertEquals(UlanziOsrsPlugin.PULSE_PEAK,
 			UlanziOsrsPlugin.pulseFactor(start, start), 0.0001);
 
 		double midway = UlanziOsrsPlugin.pulseFactor(start, start + UlanziOsrsPlugin.PULSE_MS / 2);
-		Assert.assertTrue(midway > 1.0 && midway < UlanziOsrsPlugin.PULSE_PEAK);
+		Assert.assertTrue(midway > UlanziOsrsPlugin.PULSE_REST && midway < UlanziOsrsPlugin.PULSE_PEAK);
 
-		Assert.assertEquals(1.0,
+		Assert.assertEquals(UlanziOsrsPlugin.PULSE_REST,
 			UlanziOsrsPlugin.pulseFactor(start, start + UlanziOsrsPlugin.PULSE_MS), 0.0001);
 	}
 
 	@Test
-	public void thereIsNoPulseBeforeTheFirstDrop()
+	public void thePulseNeverHoldsTwoFramesAtTheSameBrightness()
 	{
-		Assert.assertEquals(1.0, UlanziOsrsPlugin.pulseFactor(0L, 5_000L), 0.0001);
+		// A held frame serialises identically and gets deduped, which reads as a freeze.
+		long start = 10_000L;
+		double previous = UlanziOsrsPlugin.pulseFactor(start, start);
+		for (long at = 120L; at < UlanziOsrsPlugin.PULSE_MS; at += 120L)
+		{
+			double factor = UlanziOsrsPlugin.pulseFactor(start, start + at);
+			Assert.assertTrue("frame at " + at + "ms repeated " + factor, factor < previous);
+			previous = factor;
+		}
+	}
+
+	@Test
+	public void thePulseLeavesThePeakFasterThanItArrivesAtRest()
+	{
+		long start = 10_000L;
+		double peak = UlanziOsrsPlugin.pulseFactor(start, start);
+		double firstTenth = peak - UlanziOsrsPlugin.pulseFactor(start, start + UlanziOsrsPlugin.PULSE_MS / 10);
+		double lastTenth = UlanziOsrsPlugin.pulseFactor(start, start + UlanziOsrsPlugin.PULSE_MS * 9 / 10)
+			- UlanziOsrsPlugin.PULSE_REST;
+		Assert.assertTrue("should fall away from the peak briskly", firstTenth > lastTenth);
+	}
+
+	@Test
+	public void thePanelRestsDimmedUntilTheFirstDrop()
+	{
+		Assert.assertEquals(UlanziOsrsPlugin.PULSE_REST, UlanziOsrsPlugin.pulseFactor(0L, 5_000L), 0.0001);
+	}
+
+	@Test
+	public void restingDimGivesWhiteSomewhereToBrightenFrom()
+	{
+		Color rest = AwtrixClient.brighten(Color.WHITE, UlanziOsrsPlugin.PULSE_REST);
+		Assert.assertTrue("white must dim at rest", rest.getRed() < 255);
+		Color peak = AwtrixClient.brighten(Color.WHITE, UlanziOsrsPlugin.PULSE_PEAK);
+		Assert.assertEquals(255, peak.getRed());
 	}
 
 	@Test
 	public void thePulseBrightensLitPixelsAndLeavesBlackAlone()
 	{
 		Assert.assertEquals(Color.BLACK, AwtrixClient.brighten(Color.BLACK, 1.8));
+		Assert.assertEquals(Color.BLACK, AwtrixClient.brighten(Color.BLACK, 0.5));
 		Assert.assertEquals(new Color(180, 0, 0), AwtrixClient.brighten(new Color(100, 0, 0), 1.8));
+		Assert.assertEquals(new Color(50, 0, 0), AwtrixClient.brighten(new Color(100, 0, 0), 0.5));
 		// Already-bright channels clamp instead of wrapping.
 		Assert.assertEquals(Color.WHITE, AwtrixClient.brighten(Color.WHITE, 1.8));
 		// A factor of 1 is the untouched colour.

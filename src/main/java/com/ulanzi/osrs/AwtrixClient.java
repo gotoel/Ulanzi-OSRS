@@ -78,6 +78,7 @@ public class AwtrixClient
 	private final Map<String, String> pulseIcons = new ConcurrentHashMap<>();
 
 	private static final long STATS_REFRESH_MS = 8_000L;
+	private static final double MIN_PULSE = 0.2;
 	private static final double MAX_PULSE = 3.0;
 	private static final int PULSE_ICON_CACHE = 64;
 
@@ -101,11 +102,13 @@ public class AwtrixClient
 	/**
 	 * Brightness applied to everything sent from here until it is set back, which is
 	 * how an XP drop lifts the whole panel at once instead of moving text across it.
-	 * Black stays black, so the panel brightens without washing out.
+	 * Below 1 it dims, which is what gives white somewhere to brighten from: white is
+	 * already at full, so multiplying it up does nothing. Black stays black either
+	 * way, so the background never washes out.
 	 */
 	void setPulse(double factor)
 	{
-		pulse = Math.max(1.0, Math.min(MAX_PULSE, factor));
+		pulse = Math.max(MIN_PULSE, Math.min(MAX_PULSE, factor));
 	}
 
 	private String hex(Color color)
@@ -115,14 +118,17 @@ public class AwtrixClient
 
 	static Color brighten(Color color, double factor)
 	{
-		if (factor <= 1.0)
+		if (factor == 1.0)
 		{
 			return color;
 		}
-		return new Color(
-			Math.min(255, (int) Math.round(color.getRed() * factor)),
-			Math.min(255, (int) Math.round(color.getGreen() * factor)),
-			Math.min(255, (int) Math.round(color.getBlue() * factor)));
+		return new Color(channel(color.getRed(), factor), channel(color.getGreen(), factor),
+			channel(color.getBlue(), factor));
+	}
+
+	private static int channel(int value, double factor)
+	{
+		return Math.max(0, Math.min(255, (int) Math.round(value * factor)));
 	}
 
 	/**
@@ -132,7 +138,7 @@ public class AwtrixClient
 	private String pulseIcon(String icon)
 	{
 		double factor = pulse;
-		if (icon == null || icon.isEmpty() || factor <= 1.0)
+		if (icon == null || icon.isEmpty() || factor == 1.0)
 		{
 			return icon;
 		}

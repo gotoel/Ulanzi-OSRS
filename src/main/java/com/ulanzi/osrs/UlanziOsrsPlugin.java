@@ -65,8 +65,10 @@ public class UlanziOsrsPlugin extends Plugin
 	private static final Color XP_RATE_COLOR = Color.WHITE;
 	private static final Color XP_DROP_COLOR = Color.WHITE;
 	static final long PULSE_MS = 1_000L;
-	static final double PULSE_PEAK = 1.8;
-	private static final long PULSE_ATTACK_MS = 120L;
+	/** Full colour, with a little headroom for anything not already maxed out. */
+	static final double PULSE_PEAK = 1.25;
+	/** Where the panel sits between drops, so white has somewhere to brighten from. */
+	static final double PULSE_REST = 0.5;
 	private static final long PULSE_FRAME_MS = 120L;
 	private static final String CONFIG_VERSION_KEY = "configVersion";
 	private static final int CONFIG_VERSION = 2;
@@ -463,26 +465,32 @@ public class UlanziOsrsPlugin extends Plugin
 	}
 
 	/**
-	 * Full brightness on landing, then a fade back to normal across the rest of the
-	 * second. 1.0 means nothing is being scaled.
+	 * Full brightness on landing, fading back to the resting dim over the second.
+	 * The fade is steepest at the start, so the peak reads as a hit rather than
+	 * something held: an even fade leaves the brightest frames looking stuck,
+	 * especially where a colour is already maxed out and cannot go higher.
 	 */
 	static double pulseFactor(long startMs, long nowMs)
 	{
-		if (startMs <= 0L)
-		{
-			return 1.0;
-		}
 		long elapsed = nowMs - startMs;
-		if (elapsed < 0L || elapsed >= PULSE_MS)
+		if (startMs <= 0L || elapsed < 0L || elapsed >= PULSE_MS)
+		{
+			return PULSE_REST;
+		}
+		double remaining = 1.0 - elapsed / (double) PULSE_MS;
+		return PULSE_REST + (PULSE_PEAK - PULSE_REST) * remaining * remaining;
+	}
+
+	/**
+	 * Only pulse mode moves the brightness; every other drop style leaves it alone.
+	 */
+	private double currentPulse(long nowMs)
+	{
+		if (!config.xpDrops() || config.xpDropDirection() != XpDropDirection.PULSE)
 		{
 			return 1.0;
 		}
-		if (elapsed < PULSE_ATTACK_MS)
-		{
-			return PULSE_PEAK;
-		}
-		double fade = (elapsed - PULSE_ATTACK_MS) / (double) (PULSE_MS - PULSE_ATTACK_MS);
-		return 1.0 + (PULSE_PEAK - 1.0) * (1.0 - fade);
+		return pulseFactor(pulseStartMs, nowMs);
 	}
 
 	static String xpDropText(int xp)
@@ -521,6 +529,8 @@ public class UlanziOsrsPlugin extends Plugin
 			int energy = Math.min(100, Math.max(0, client.getEnergy() / 100));
 			int spec = Math.min(100, Math.max(0, client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT) / 10));
 
+			awtrixClient.setPulse(currentPulse(System.currentTimeMillis()));
+
 			ThresholdUnit unit = config.thresholdUnit();
 			boolean lowHp = config.lowHitpointsEnabled()
 				&& unit.isLow(hitpoints, hitpointsMax, config.lowHitpointsThreshold());
@@ -543,8 +553,8 @@ public class UlanziOsrsPlugin extends Plugin
 			AlertDisplayMode mode = chosen == OverlayKind.AFK ? config.afkDisplay() : display;
 			flushXpDrop(chosen != null && mode.usesFullPanel(),
 				chosen == null && activity != null && showsSkillProgress());
-			// Everything pushed below this point is scaled by the pulse.
-			awtrixClient.setPulse(pulseFactor(pulseStartMs, System.currentTimeMillis()));
+			// Again, in case a drop landed this tick and moved the pulse.
+			awtrixClient.setPulse(currentPulse(System.currentTimeMillis()));
 			if (chosen != null)
 			{
 				if (afkHeld && !(chosen == OverlayKind.AFK && mode.usesFullPanel()))
