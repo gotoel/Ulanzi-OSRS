@@ -7,7 +7,8 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum XpRateSource
 {
-	CLOCK("This plugin"),
+	CLOCK("Session"),
+	SLIDING_WINDOW("Sliding window"),
 	XP_TRACKER("RuneLite XP Tracker");
 
 	private final String name;

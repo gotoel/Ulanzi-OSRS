@@ -990,25 +990,29 @@ public class UlanziOsrsPlugin extends Plugin
 
 	/**
 	 * RuneLite's XP Tracker reports 0 while it has nothing for the skill or is switched off,
-	 * and then our own estimate is used.
+	 * and then our own session average is used.
 	 */
 	private int xpPerHour(Skill skill, long nowMs)
 	{
-		if (config.xpRateSource() != XpRateSource.XP_TRACKER)
+		XpRateSource source = config.xpRateSource();
+		if (source == XpRateSource.SLIDING_WINDOW)
 		{
-			return xpRates.perHour(skill, nowMs);
+			return xpRates.perHourWindow(skill, nowMs, config.xpRateWindowSeconds() * 1000L);
 		}
-		try
+		if (source == XpRateSource.XP_TRACKER)
 		{
-			int tracked = xpTrackerService.getXpHr(skill);
-			if (tracked > 0)
+			try
 			{
-				return tracked;
+				int tracked = xpTrackerService.getXpHr(skill);
+				if (tracked > 0)
+				{
+					return tracked;
+				}
 			}
-		}
-		catch (RuntimeException ex)
-		{
-			log.debug("XP Tracker rate unavailable for {}", skill, ex);
+			catch (RuntimeException ex)
+			{
+				log.debug("XP Tracker rate unavailable for {}", skill, ex);
+			}
 		}
 		return xpRates.perHour(skill, nowMs);
 	}

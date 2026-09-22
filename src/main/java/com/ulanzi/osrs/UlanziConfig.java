@@ -404,20 +404,34 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "xpRateSource",
 		name = "XP/h source",
-		description = "This plugin times each skill from your second XP drop and starts over after 5 minutes without XP. RuneLite XP Tracker matches its panel and globes, including its pause and reset settings; while it has no rate, this plugin's is used.",
+		description = "Session averages each skill from your second XP drop. Sliding window averages only the last few seconds, so the rate follows what you are doing now instead of the session so far. Both start over after 5 minutes without XP. RuneLite XP Tracker matches its panel and globes, including its pause and reset settings; while it has no rate, the session average is used.",
 		position = 1,
 		section = skillProgressSection
 	)
 	default XpRateSource xpRateSource()
 	{
-		return XpRateSource.CLOCK;
+		return XpRateSource.SLIDING_WINDOW;
+	}
+
+	@ConfigItem(
+		keyName = "xpRateWindowSeconds",
+		name = "Sliding window",
+		description = "How far back the sliding window looks. The rate is always divided by the whole window, so it climbs from zero over the first one and falls back to zero when you stop. Short suits steady XP like alching, long suits bursty XP like combat. Only used by the sliding window source.",
+		position = 2,
+		section = skillProgressSection
+	)
+	@Range(min = 5, max = 900)
+	@Units(Units.SECONDS)
+	default int xpRateWindowSeconds()
+	{
+		return 60;
 	}
 
 	@ConfigItem(
 		keyName = "progressGradient",
 		name = "Progress bar",
 		description = "Colors of the bar toward the next level. The gradient is revealed as the bar fills.",
-		position = 2,
+		position = 3,
 		section = skillProgressSection
 	)
 	default ProgressGradient progressGradient()
@@ -429,7 +443,7 @@ public interface UlanziConfig extends Config
 		keyName = "skillProgressInCombat",
 		name = "Also in combat",
 		description = "Show the combat skill's progress while fighting too. Off keeps hitpoints and prayer up in combat.",
-		position = 3,
+		position = 4,
 		section = skillProgressSection
 	)
 	default boolean skillProgressInCombat()
@@ -441,7 +455,7 @@ public interface UlanziConfig extends Config
 		keyName = "xpDrops",
 		name = "XP drops",
 		description = "Fly each XP gain, like +175 xp, across the panel. Gains that land while one is still flying are added to the next.",
-		position = 4,
+		position = 5,
 		section = skillProgressSection
 	)
 	default boolean xpDrops()
@@ -453,7 +467,7 @@ public interface UlanziConfig extends Config
 		keyName = "xpDropDirection",
 		name = "XP drop direction",
 		description = "Which way XP drops travel across the panel. In place does not move: on the skill progress page it briefly replaces the level and XP/h, elsewhere it shows still for a moment.",
-		position = 5,
+		position = 6,
 		section = skillProgressSection
 	)
 	default XpDropDirection xpDropDirection()

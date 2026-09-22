@@ -37,6 +37,39 @@ public class SkillProgressTest
 	}
 
 	@Test
+	public void theWindowDividesByTheWholeWindowNotTheTimePlayed()
+	{
+		XpRateTracker rates = new XpRateTracker();
+		// One 100 XP drop, ten seconds in, read against a 60 second window:
+		// 100 * 3600 / 60 = 6000, not the 36000 the ten seconds alone would give.
+		rates.onXp(Skill.WOODCUTTING, 100, 10_000L);
+		Assert.assertEquals(6_000, rates.perHourWindow(Skill.WOODCUTTING, 10_000L, 60_000L));
+		Assert.assertEquals(-1, rates.perHourWindow(Skill.MINING, 10_000L, 60_000L));
+	}
+
+	@Test
+	public void theWindowCountsTheFirstDropUnlikeTheSessionAverage()
+	{
+		XpRateTracker rates = new XpRateTracker();
+		rates.onXp(Skill.FISHING, 100, 0L);
+		Assert.assertEquals(-1, rates.perHour(Skill.FISHING, 0L));
+		Assert.assertEquals(6_000, rates.perHourWindow(Skill.FISHING, 0L, 60_000L));
+	}
+
+	@Test
+	public void theWindowDecaysToZeroWhenDropsFallOutOfIt()
+	{
+		XpRateTracker rates = new XpRateTracker();
+		rates.onXp(Skill.MINING, 100, 0L);
+		rates.onXp(Skill.MINING, 100, 1_000L);
+		Assert.assertEquals(12_000, rates.perHourWindow(Skill.MINING, 1_000L, 60_000L));
+
+		// Both drops are now older than the window, but the break has not elapsed.
+		Assert.assertEquals(0, rates.perHourWindow(Skill.MINING, 61_000L, 60_000L));
+		Assert.assertEquals(-1, rates.perHourWindow(Skill.MINING, 1_000L + XpRateTracker.BREAK_MS + 1, 60_000L));
+	}
+
+	@Test
 	public void ratesStayFourCharactersWide()
 	{
 		Assert.assertEquals("950", XpRateTracker.format(950));
