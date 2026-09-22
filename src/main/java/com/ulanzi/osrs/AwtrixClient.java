@@ -1,11 +1,20 @@
 package com.ulanzi.osrs;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import java.awt.Color;
 import java.io.IOException;
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import javax.inject.Inject;
@@ -30,27 +39,52 @@ public class AwtrixClient
 	static final String NOTIF_LOW_HP = "osrs-low-hp";
 	static final String NOTIF_LOW_PRAY = "osrs-low-pray";
 	static final String NOTIF_TEST = "osrs-test";
+	static final String NOTIF_XP_DROP = "osrs-xp";
+	static final long LEVEL_UP_MS = 5_000L;
+	static final int XP_DROP_SPEED = 150;
+	static final long XP_DROP_IN_PLACE_MS = 1_800L;
+	private static final int SCROLL_PX_PER_SEC = 21;
+	private static final int PANEL_WIDTH = 32;
+	private static final int ICON_COLUMN = 9;
+	private static final int SMALL_CHAR_WIDTH = 4;
 
 	private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 	private static final String AFK_RTTTL = "afk:d=4,o=5,b=160:c6,p,c6";
 	private static final String HP_RTTTL = "lowhp:d=16,o=6,b=200:c,e,g,c7";
 	private static final String PRAY_RTTTL = "lowpray:d=8,o=5,b=140:e,c,e,c";
+	private static final String LEVEL_RTTTL = "levelup:d=8,o=5,b=180:c,e,g,4c6,p,g,2c6";
 
 	private final OkHttpClient httpClient;
 	private final UlanziConfig config;
+	private final Gson gson;
 
 	private final AtomicReference<String> lastStatsBody = new AtomicReference<>();
 	private final AtomicReference<String> lastAfkBody = new AtomicReference<>();
 	private final AtomicReference<Long> lastStatsSentMs = new AtomicReference<>(0L);
 	private final AtomicReference<Boolean> loopConfigured = new AtomicReference<>(false);
+	private final AtomicReference<AppLoop> savedLoop = new AtomicReference<>();
+	private final AtomicBoolean loopSnapshotTried = new AtomicBoolean(false);
+	private final AtomicBoolean loopChanged = new AtomicBoolean(false);
+	private final AtomicReference<Boolean> reachable = new AtomicReference<>();
+	private volatile Consumer<String> messages = message -> { };
 
 	private static final long STATS_REFRESH_MS = 8_000L;
 
 	@Inject
-	AwtrixClient(OkHttpClient httpClient, UlanziConfig config)
+	AwtrixClient(OkHttpClient httpClient, UlanziConfig config, Gson gson)
 	{
 		this.httpClient = httpClient;
 		this.config = config;
+		this.gson = gson;
+	}
+
+	/**
+	 * Where connection results go. Called from OkHttp threads.
+	 */
+	void setMessageSink(Consumer<String> sink)
+	{
+		messages = sink == null ? message -> { } : sink;
+		reachable.set(null);
 	}
 
 	void clearCache()
@@ -63,6 +97,12 @@ public class AwtrixClient
 
 	void testConnection()
 	{
+		if (baseUrl() == null)
+		{
+			messages.accept("Set the clock address first.");
+			return;
+		}
+
 		JsonObject body = new JsonObject();
 		body.addProperty("name", NOTIF_TEST);
 		body.addProperty("text", "OK");
@@ -74,7 +114,165 @@ public class AwtrixClient
 		body.addProperty("durationMs", 2000);
 		body.addProperty("hold", false);
 		body.addProperty("stack", false);
+		send("POST", "/api/v1/notifications", body.toString(), true, result ->
+		{
+			if (result.ok)
+			{
+				send("GET", "/api/v1/device", null, true, device ->
+				{
+					String name = device.ok ? hostname(device.body) : null;
+					messages.accept(name == null ? "Connected to the clock." : "Connected to " + name + ".");
+				});
+			}
+			else if (result.reachable)
+			{
+				messages.accept("The clock answered with " + result.problem + ". Is it running AWTRIX NG?");
+			}
+			else
+			{
+				messages.accept("Couldn't reach the clock: " + result.problem + ".");
+			}
+		});
+	}
+
+	private String hostname(String deviceJson)
+	{
+		if (deviceJson == null)
+		{
+			return null;
+		}
+		try
+		{
+			JsonObject device = gson.fromJson(deviceJson, JsonObject.class);
+			String name = device == null ? null : stringOrNull(device, "hostname");
+			return name == null || name.trim().isEmpty() ? null : name.trim();
+		}
+		catch (JsonParseException ex)
+		{
+			return null;
+		}
+	}
+
+	/**
+	 * A new level with the skill icon, the number painted in a moving rainbow.
+	 * Stacked so several level-ups at once play one after another.
+	 */
+	void showLevelUp(String skillName, String icon, int level, boolean sound)
+	{
+		JsonObject body = new JsonObject();
+		body.addProperty("name", "osrs-level-" + skillName.toLowerCase());
+		body.addProperty("text", String.valueOf(level));
+		body.addProperty("font", "large");
+		body.addProperty("textCenter", true);
+		body.add("scroll", scrollStatic());
+		body.addProperty("backgroundColor", "#000000");
+		body.addProperty("palette", "Rainbow");
+		body.addProperty("textColor", "palette");
+		body.addProperty("paletteSpan", 16);
+		body.addProperty("paletteSpeed", 1.5);
+		body.addProperty("durationMs", LEVEL_UP_MS);
+		body.addProperty("hold", false);
+		body.addProperty("stack", true);
+		body.addProperty("wakeup", true);
+		if (icon != null)
+		{
+			body.addProperty("icon", icon);
+			body.addProperty("iconMode", "fixed");
+		}
+		if (sound)
+		{
+			body.addProperty("soundRtttl", LEVEL_RTTTL);
+		}
 		enqueue("POST", "/api/v1/notifications", body.toString(), null);
+	}
+
+	/**
+	 * Shows the gain for about as long as its animation lasts, then the page ends.
+	 * Returns that time, so the next drop can wait for this one.
+	 */
+	long showXpDrop(String text, Color color, String icon, XpDropDirection direction)
+	{
+		switch (direction)
+		{
+			case UP:
+			case DOWN:
+				return showVerticalXpDrop(text, color, icon, direction == XpDropDirection.UP);
+			case IN_PLACE:
+				return showStillXpDrop(text, color, icon);
+			default:
+				return showScrollingXpDrop(text, color, icon, direction);
+		}
+	}
+
+	private long showVerticalXpDrop(String text, Color color, String icon, boolean upward)
+	{
+		JsonObject body = xpDropBody("", color, icon);
+		body.add("scroll", scrollStatic());
+		JsonArray icons = new JsonArray();
+		JsonObject slide = new JsonObject();
+		slide.addProperty("icon", XpDropGif.encode(text, color, upward));
+		slide.addProperty("x", icon != null ? ICON_COLUMN : (PANEL_WIDTH - XpDropGif.WIDTH) / 2);
+		slide.addProperty("y", 0);
+		icons.add(slide);
+		body.add("icons", icons);
+		long visibleMs = XpDropGif.visibleMs();
+		body.addProperty("durationMs", visibleMs + XpDropGif.MOVE_MS);
+		enqueue("POST", "/api/v1/notifications", body.toString(), null);
+		return visibleMs;
+	}
+
+	private long showStillXpDrop(String text, Color color, String icon)
+	{
+		JsonObject body = xpDropBody(text, color, icon);
+		body.addProperty("textCenter", true);
+		body.add("scroll", scrollStatic());
+		body.addProperty("durationMs", XP_DROP_IN_PLACE_MS);
+		enqueue("POST", "/api/v1/notifications", body.toString(), null);
+		return XP_DROP_IN_PLACE_MS;
+	}
+
+	/**
+	 * Scrolls the gain in from one edge and off the other once.
+	 */
+	private long showScrollingXpDrop(String text, Color color, String icon, XpDropDirection direction)
+	{
+		JsonObject body = xpDropBody(text, color, icon);
+		JsonObject scroll = new JsonObject();
+		scroll.addProperty("mode", "wrap");
+		scroll.addProperty("direction", direction.getScrollDirection());
+		scroll.addProperty("entry", "offscreen");
+		scroll.addProperty("whenFits", "scroll");
+		scroll.addProperty("speed", XP_DROP_SPEED);
+		scroll.addProperty("holdMs", 0);
+		body.add("scroll", scroll);
+		body.addProperty("repeat", 1);
+		enqueue("POST", "/api/v1/notifications", body.toString(), null);
+		return xpDropFlightMs(text, icon != null);
+	}
+
+	private static JsonObject xpDropBody(String text, Color color, String icon)
+	{
+		JsonObject body = new JsonObject();
+		body.addProperty("name", NOTIF_XP_DROP);
+		body.addProperty("text", text);
+		body.addProperty("textColor", toHex(color));
+		body.addProperty("font", "small");
+		body.addProperty("textCase", "asTyped");
+		body.addProperty("backgroundColor", "#000000");
+		body.addProperty("hold", false);
+		body.addProperty("stack", true);
+		applyActivityIcon(body, icon);
+		return body;
+	}
+
+	/**
+	 * The text travels the width of the text area plus its own width at 21 px/s per 100% speed.
+	 */
+	static long xpDropFlightMs(String text, boolean icon)
+	{
+		int area = icon ? PANEL_WIDTH - ICON_COLUMN : PANEL_WIDTH;
+		int distance = area + (text == null ? 0 : text.length()) * SMALL_CHAR_WIDTH;
+		return distance * 1000L * 100L / ((long) SCROLL_PX_PER_SEC * XP_DROP_SPEED);
 	}
 
 	void showAfk(boolean playSound)
@@ -458,8 +656,8 @@ public class AwtrixClient
 		int barCount = bars == null ? 0 : bars.size();
 		if (barCount > 0)
 		{
-			// Keep the centered line off the 2px columns at the right edge.
-			body.addProperty("textOffsetX", -2 * barCount);
+			// Center in the space left of the 2px columns: that center sits one pixel left per column.
+			body.addProperty("textOffsetX", -barCount);
 			body.add("draw", verticalColumns(bars));
 		}
 		if (background != null)
@@ -467,15 +665,7 @@ public class AwtrixClient
 			body.addProperty("backgroundColor", toHex(background));
 		}
 
-		JsonArray text = new JsonArray();
-		for (TextFragment fragment : fragments)
-		{
-			JsonObject part = new JsonObject();
-			part.addProperty("text", fragment.getText());
-			part.addProperty("color", toHex(fragment.getColor()));
-			text.add(part);
-		}
-		body.add("text", text);
+		body.add("text", fragmentsJson(fragments));
 
 		if (hpPercent >= 0)
 		{
@@ -491,6 +681,46 @@ public class AwtrixClient
 		putStats(body);
 	}
 
+	/**
+	 * Text beside the activity icon, with the bottom row painted from a gradient up to the percent.
+	 */
+	void pushSkillProgress(List<TextFragment> fragments, int progressPercent, List<Color> gradient, String activityIcon)
+	{
+		JsonObject body = baseStatsApp();
+		body.addProperty("font", "small");
+		body.addProperty("textCenter", true);
+		body.add("scroll", scrollStatic());
+		applyActivityIcon(body, activityIcon);
+		body.add("text", fragmentsJson(fragments));
+		if (progressPercent >= 0)
+		{
+			JsonArray palette = new JsonArray();
+			for (Color stop : gradient)
+			{
+				palette.add(toHex(stop));
+			}
+			body.add("palette", palette);
+			body.addProperty("progress", progressPercent);
+			body.addProperty("progressColor", "palette");
+			body.addProperty("progressTrackColor", "#202020");
+			body.addProperty("textInFront", true);
+		}
+		putStats(body);
+	}
+
+	private static JsonArray fragmentsJson(List<TextFragment> fragments)
+	{
+		JsonArray text = new JsonArray();
+		for (TextFragment fragment : fragments)
+		{
+			JsonObject part = new JsonObject();
+			part.addProperty("text", fragment.getText());
+			part.addProperty("color", toHex(fragment.getColor()));
+			text.add(part);
+		}
+		return text;
+	}
+
 	void clearStats()
 	{
 		lastStatsBody.set(null);
@@ -504,8 +734,29 @@ public class AwtrixClient
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_AFK, null, null);
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_LOW_HP, null, null);
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_LOW_PRAY, null, null);
+		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_XP_DROP, null, null);
 		enqueue("DELETE", "/api/v1/apps/" + APP_STATS, null, null);
-		restoreBuiltinLoop();
+		restoreLoop();
+	}
+
+	/**
+	 * Put the rotation back the way it was before the stats app took it over.
+	 * Nothing is sent if the plugin never changed it.
+	 */
+	private void restoreLoop()
+	{
+		loopSnapshotTried.set(false);
+		if (!loopChanged.getAndSet(false))
+		{
+			return;
+		}
+		AppLoop saved = savedLoop.getAndSet(null);
+		if (saved == null || saved.order.isEmpty())
+		{
+			restoreBuiltinLoop();
+			return;
+		}
+		enqueue("PUT", "/api/v1/apps/order", saved.toJson().toString(), null);
 	}
 
 	private void restoreBuiltinLoop()
@@ -558,7 +809,35 @@ public class AwtrixClient
 		}
 		loopConfigured.set(true);
 
-		// Keep builtins as fallback so the panel never goes blank if osrs is removed.
+		if (savedLoop.get() != null || loopSnapshotTried.getAndSet(true))
+		{
+			putStatsLoop();
+			return;
+		}
+		send("GET", "/api/v1/apps", null, false, result ->
+		{
+			if (result.ok && result.body != null)
+			{
+				try
+				{
+					JsonArray apps = gson.fromJson(result.body, JsonArray.class);
+					if (apps != null)
+					{
+						savedLoop.compareAndSet(null, parseAppLoop(apps));
+					}
+				}
+				catch (JsonParseException ex)
+				{
+					log.debug("Could not read the clock's app list", ex);
+				}
+			}
+			putStatsLoop();
+		});
+	}
+
+	private void putStatsLoop()
+	{
+		// Keep Time as a fallback so the panel never goes blank if osrs is removed.
 		JsonObject body = new JsonObject();
 		JsonArray order = new JsonArray();
 		order.add(APP_STATS);
@@ -566,7 +845,52 @@ public class AwtrixClient
 		body.add("order", order);
 		body.add("disabled", new JsonArray());
 
+		loopChanged.set(true);
 		enqueue("PUT", "/api/v1/apps/order", body.toString(), null);
+	}
+
+	/**
+	 * The rotation from GET /api/v1/apps: apps with a slot in slot order, plus the switched-off ones.
+	 * The stats app itself is left out, since it is deleted before the rotation is restored.
+	 */
+	static AppLoop parseAppLoop(JsonArray apps)
+	{
+		List<JsonObject> slotted = new ArrayList<>();
+		List<String> disabled = new ArrayList<>();
+		for (JsonElement element : apps)
+		{
+			if (!element.isJsonObject())
+			{
+				continue;
+			}
+			JsonObject app = element.getAsJsonObject();
+			String name = stringOrNull(app, "name");
+			if (name == null || APP_STATS.equals(name))
+			{
+				continue;
+			}
+			if (app.has("enabled") && !app.get("enabled").isJsonNull() && !app.get("enabled").getAsBoolean())
+			{
+				disabled.add(name);
+			}
+			else if (app.has("slot") && app.get("slot").isJsonPrimitive())
+			{
+				slotted.add(app);
+			}
+		}
+		slotted.sort(Comparator.comparingInt(app -> app.get("slot").getAsInt()));
+		List<String> order = new ArrayList<>();
+		for (JsonObject app : slotted)
+		{
+			order.add(app.get("name").getAsString());
+		}
+		return new AppLoop(order, disabled);
+	}
+
+	private static String stringOrNull(JsonObject object, String key)
+	{
+		JsonElement value = object.get(key);
+		return value == null || !value.isJsonPrimitive() ? null : value.getAsString();
 	}
 
 	private void activateStats()
@@ -651,13 +975,23 @@ public class AwtrixClient
 
 	private void enqueue(String method, String path, String jsonBody, Consumer<Boolean> done)
 	{
+		send(method, path, jsonBody, false, done == null ? null : result -> done.accept(result.ok));
+	}
+
+	/**
+	 * The clock counts as reachable whenever it answers, even with a 404 for a notification
+	 * that already expired. Only no answer at all, or a rejected login, counts as unreachable.
+	 * Background requests report a change in the game chat; a test reports its own result.
+	 */
+	private void send(String method, String path, String jsonBody, boolean test, Consumer<Result> done)
+	{
 		String base = baseUrl();
 		if (base == null)
 		{
 			log.debug("AWTRIX request skipped, no clock address: {} {}", method, path);
 			if (done != null)
 			{
-				done.accept(false);
+				done.accept(Result.failed("no clock address"));
 			}
 			return;
 		}
@@ -686,29 +1020,74 @@ public class AwtrixClient
 			public void onFailure(Call call, IOException e)
 			{
 				log.debug("AWTRIX request failed: {} {}", method, path, e);
-				if (done != null)
-				{
-					done.accept(false);
-				}
+				finish(Result.failed(describe(e)));
 			}
 
 			@Override
 			public void onResponse(Call call, Response response)
 			{
+				Result result;
 				try (Response ignored = response)
 				{
-					boolean ok = response.isSuccessful();
-					if (!ok)
+					int code = response.code();
+					if (response.isSuccessful())
 					{
-						log.debug("AWTRIX {} {} -> {}", method, path, response.code());
+						String body = null;
+						if ("GET".equals(method) && response.body() != null)
+						{
+							body = response.body().string();
+						}
+						result = Result.ok(body);
 					}
-					if (done != null)
+					else
 					{
-						done.accept(ok);
+						log.debug("AWTRIX {} {} -> {}", method, path, code);
+						result = code == 401 || code == 403
+							? Result.failed("the clock rejected the login (HTTP " + code + "), check the username and password")
+							: Result.answered("HTTP " + code);
 					}
+				}
+				catch (IOException ex)
+				{
+					log.debug("AWTRIX response failed: {} {}", method, path, ex);
+					result = Result.failed(describe(ex));
+				}
+				finish(result);
+			}
+
+			private void finish(Result result)
+			{
+				Boolean before = reachable.getAndSet(result.reachable);
+				if (!test && before != null && before != result.reachable)
+				{
+					messages.accept(result.reachable
+						? "Connected to the clock again."
+						: "Lost the clock: " + result.problem + ".");
+				}
+				else if (!test && before == null && !result.reachable)
+				{
+					messages.accept("Couldn't reach the clock: " + result.problem + ".");
+				}
+				if (done != null)
+				{
+					done.accept(result);
 				}
 			}
 		});
+	}
+
+	static String describe(IOException e)
+	{
+		if (e instanceof UnknownHostException)
+		{
+			return "unknown host, check the address";
+		}
+		if (e instanceof SocketTimeoutException || e instanceof ConnectException || e instanceof NoRouteToHostException)
+		{
+			return "no answer, check the address and that the clock is on the same network";
+		}
+		// OkHttp's messages carry the host and port, which should not end up in the chat log.
+		return "the connection failed (" + e.getClass().getSimpleName() + ")";
 	}
 
 	private String baseUrl()
@@ -782,6 +1161,61 @@ public class AwtrixClient
 		{
 			this.percent = percent;
 			this.color = color;
+		}
+	}
+
+	static final class AppLoop
+	{
+		final List<String> order;
+		final List<String> disabled;
+
+		AppLoop(List<String> order, List<String> disabled)
+		{
+			this.order = order;
+			this.disabled = disabled;
+		}
+
+		JsonObject toJson()
+		{
+			JsonObject body = new JsonObject();
+			JsonArray orderJson = new JsonArray();
+			order.forEach(orderJson::add);
+			JsonArray disabledJson = new JsonArray();
+			disabled.forEach(disabledJson::add);
+			body.add("order", orderJson);
+			body.add("disabled", disabledJson);
+			return body;
+		}
+	}
+
+	private static final class Result
+	{
+		final boolean ok;
+		final boolean reachable;
+		final String problem;
+		final String body;
+
+		private Result(boolean ok, boolean reachable, String problem, String body)
+		{
+			this.ok = ok;
+			this.reachable = reachable;
+			this.problem = problem;
+			this.body = body;
+		}
+
+		static Result ok(String body)
+		{
+			return new Result(true, true, null, body);
+		}
+
+		static Result answered(String problem)
+		{
+			return new Result(false, true, problem, null);
+		}
+
+		static Result failed(String problem)
+		{
+			return new Result(false, false, problem, null);
 		}
 	}
 }

@@ -8,7 +8,7 @@ import lombok.Getter;
 public enum AfkTintMode
 {
 	OFF("Off"),
-	VALUES("Values & health bar"),
+	VALUES("Values and bars"),
 	BACKGROUND("Background"),
 	BOTH("Values and background");
 

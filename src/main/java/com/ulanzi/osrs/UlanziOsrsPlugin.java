@@ -3,12 +3,16 @@ package com.ulanzi.osrs;
 import com.google.inject.Provides;
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.Constants;
+import net.runelite.api.Experience;
 import net.runelite.api.GameState;
 import net.runelite.api.Player;
 import net.runelite.api.Skill;
@@ -19,11 +23,18 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.client.chat.ChatColorType;
+import net.runelite.client.chat.ChatMessageBuilder;
+import net.runelite.client.chat.ChatMessageManager;
+import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.xptracker.XpTrackerPlugin;
+import net.runelite.client.plugins.xptracker.XpTrackerService;
 
 @Slf4j
 @PluginDescriptor(
@@ -31,6 +42,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 	description = "Shows AFK status, combat stats, and skilling activity on an AWTRIX NG Ulanzi TC001",
 	tags = {"ulanzi", "awtrix", "afk", "hitpoints", "prayer", "skilling", "clock"}
 )
+@PluginDependency(XpTrackerPlugin.class)
 public class UlanziOsrsPlugin extends Plugin
 {
 	private static final long AFK_REASSERT_MS = 5_000L;
@@ -39,6 +51,17 @@ public class UlanziOsrsPlugin extends Plugin
 	private static final Color ENERGY_COLOR = new Color(0xFF_D4_00);
 	private static final Color SPEC_COLOR = new Color(0xFF_8C_00);
 	private static final Color HP_FLASH_OFF = new Color(40, 0, 0);
+	private static final Color PRAYER_FLASH_OFF = new Color(0, 20, 40);
+	private static final int PANEL_WIDTH = 32;
+	private static final int ICON_WIDTH = 8;
+	private static final int BAR_WIDTH = 2;
+	private static final int CHAR_WIDTH = 4;
+	private static final int SPACE_WIDTH = 2;
+	private static final Skill[] MELEE_SKILLS = {Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE};
+	private static final Color XP_RATE_COLOR = Color.WHITE;
+	private static final Color XP_DROP_COLOR = Color.WHITE;
+	private static final String CONFIG_VERSION_KEY = "configVersion";
+	private static final int CONFIG_VERSION = 2;
 
 	enum OverlayKind
 	{
@@ -59,6 +82,12 @@ public class UlanziOsrsPlugin extends Plugin
 	@Inject
 	private AwtrixClient awtrixClient;
 
+	@Inject
+	private ChatMessageManager chatMessageManager;
+
+	@Inject
+	private XpTrackerService xpTrackerService;
+
 	private boolean afkActive;
 	private long lastAfkSentMs;
 	private int lastHpAlertValue = Integer.MAX_VALUE;
@@ -74,21 +103,96 @@ public class UlanziOsrsPlugin extends Plugin
 	private boolean afkHeld;
 	private final SkillActivityTracker activityTracker = new SkillActivityTracker();
 	private final EnumMap<Skill, Integer> skillXp = new EnumMap<>(Skill.class);
+	private final EnumMap<Skill, Integer> skillLevels = new EnumMap<>(Skill.class);
 	private WorldPoint lastPlayerLocation;
 	private long lastCombatMs;
+	private boolean activityFromCombat;
+	private final XpRateTracker xpRates = new XpRateTracker();
+	private final EnumMap<Skill, Integer> tickXpGains = new EnumMap<>(Skill.class);
+	private Skill meleeSkill;
+	private int pendingDropXp;
+	private Skill pendingDropSkill;
+	private long nextDropMs;
+	private String inPlaceDropText;
+	private long inPlaceDropUntilMs;
 
 	@Override
 	protected void startUp()
 	{
 		resetState();
 		configManager.unsetConfiguration(UlanziConfig.GROUP, "status");
+		migrateConfig();
+		awtrixClient.setMessageSink(this::postChat);
 	}
 
 	@Override
 	protected void shutDown()
 	{
 		awtrixClient.clearAll();
+		awtrixClient.setMessageSink(null);
 		resetState();
+	}
+
+	/**
+	 * Version 2 folded each "Show X" checkbox into its style dropdown, dropped the
+	 * compact-only flash toggles, and made thresholds a percent by default.
+	 * Anyone who had set a threshold keeps it as points.
+	 */
+	private void migrateConfig()
+	{
+		String version = configManager.getConfiguration(UlanziConfig.GROUP, CONFIG_VERSION_KEY);
+		if (version != null)
+		{
+			return;
+		}
+
+		migrateShowToStyle("showHitpoints", "hitpointsStyle");
+		migrateShowToStyle("showPrayer", "prayerStyle");
+		migrateShowToStyle("showEnergy", "energyStyle");
+		migrateShowToStyle("showSpec", "specStyle");
+		configManager.unsetConfiguration(UlanziConfig.GROUP, "compactFlashLowHp");
+		configManager.unsetConfiguration(UlanziConfig.GROUP, "compactFlashLowPrayer");
+
+		boolean customThreshold = configManager.getConfiguration(UlanziConfig.GROUP, "lowHitpointsThreshold") != null
+			|| configManager.getConfiguration(UlanziConfig.GROUP, "lowPrayerThreshold") != null;
+		if (customThreshold && configManager.getConfiguration(UlanziConfig.GROUP, "thresholdUnit") == null)
+		{
+			configManager.setConfiguration(UlanziConfig.GROUP, "thresholdUnit", ThresholdUnit.POINTS);
+		}
+
+		configManager.setConfiguration(UlanziConfig.GROUP, CONFIG_VERSION_KEY, CONFIG_VERSION);
+	}
+
+	private void migrateShowToStyle(String showKey, String styleKey)
+	{
+		String show = configManager.getConfiguration(UlanziConfig.GROUP, showKey);
+		if (show == null)
+		{
+			return;
+		}
+		if (!Boolean.parseBoolean(show))
+		{
+			configManager.setConfiguration(UlanziConfig.GROUP, styleKey, StatStyle.OFF);
+		}
+		else if (configManager.getConfiguration(UlanziConfig.GROUP, styleKey) == null)
+		{
+			configManager.setConfiguration(UlanziConfig.GROUP, styleKey, StatStyle.VALUE);
+		}
+		configManager.unsetConfiguration(UlanziConfig.GROUP, showKey);
+	}
+
+	private void postChat(String message)
+	{
+		String formatted = new ChatMessageBuilder()
+			.append(ChatColorType.HIGHLIGHT)
+			.append("Ulanzi clock: ")
+			.append(ChatColorType.NORMAL)
+			.append(message)
+			.build();
+		chatMessageManager.queue(QueuedMessage.builder()
+			.type(ChatMessageType.CONSOLE)
+			.runeLiteFormattedMessage(formatted)
+			.build());
 	}
 
 	@Provides
@@ -154,19 +258,151 @@ public class UlanziOsrsPlugin extends Plugin
 	@Subscribe
 	public void onStatChanged(StatChanged event)
 	{
+		long now = System.currentTimeMillis();
+		Integer previousLevel = skillLevels.put(event.getSkill(), event.getLevel());
+		if (isLevelUp(previousLevel, event.getLevel()) && config.levelUpEnabled())
+		{
+			awtrixClient.showLevelUp(event.getSkill().getName(), SkillActivities.levelUpIcon(event.getSkill()),
+				event.getLevel(), config.levelUpSound());
+			// The drop queues behind the celebration instead of stacking up under it.
+			nextDropMs = Math.max(nextDropMs, now + AwtrixClient.LEVEL_UP_MS);
+		}
+
 		int xp = event.getXp();
 		Integer previous = skillXp.put(event.getSkill(), xp);
-		if (!config.showActivity() || previous == null || xp <= previous)
+		if (previous == null || xp <= previous)
 		{
 			return;
 		}
-		activityTracker.onXp(SkillActivities.fromSkillXp(event.getSkill()), System.currentTimeMillis());
+		int gained = xp - previous;
+		xpRates.onXp(event.getSkill(), gained, now);
+		tickXpGains.merge(event.getSkill(), gained, Integer::sum);
+		if (config.showActivity())
+		{
+			activityTracker.onXp(SkillActivities.fromSkillXp(event.getSkill()), now);
+		}
 	}
 
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
+		if (!tickXpGains.isEmpty())
+		{
+			meleeSkill = meleeSkill(tickXpGains, meleeSkill);
+			queueXpDrop(tickXpGains);
+			tickXpGains.clear();
+		}
 		refreshClock();
+	}
+
+	/**
+	 * The melee skill that got the most XP this tick. Controlled splits it evenly,
+	 * so a tie keeps the current one instead of flickering between them.
+	 */
+	static Skill meleeSkill(Map<Skill, Integer> gains, Skill current)
+	{
+		Skill best = null;
+		int bestXp = 0;
+		for (Skill skill : MELEE_SKILLS)
+		{
+			Integer gained = gains.get(skill);
+			if (gained == null)
+			{
+				continue;
+			}
+			if (gained > bestXp || (gained == bestXp && skill == current))
+			{
+				best = skill;
+				bestXp = gained;
+			}
+		}
+		return best == null ? current : best;
+	}
+
+	/**
+	 * One drop per tick with the total, like the in-game counter, iconed with the skill that got the most.
+	 */
+	private void queueXpDrop(Map<Skill, Integer> gains)
+	{
+		for (int gained : gains.values())
+		{
+			pendingDropXp += gained;
+		}
+		pendingDropSkill = dropSkill(gains);
+	}
+
+	/**
+	 * Hitpoints comes with every hit, so it only names the drop when nothing else gained.
+	 */
+	static Skill dropSkill(Map<Skill, Integer> gains)
+	{
+		Skill best = null;
+		int bestXp = 0;
+		for (Map.Entry<Skill, Integer> gain : gains.entrySet())
+		{
+			if (gain.getKey() != Skill.HITPOINTS && gain.getValue() > bestXp)
+			{
+				best = gain.getKey();
+				bestXp = gain.getValue();
+			}
+		}
+		return best != null || !gains.containsKey(Skill.HITPOINTS) ? best : Skill.HITPOINTS;
+	}
+
+	/**
+	 * In place on the skill progress page swaps its text for a moment and keeps the bar.
+	 * Anywhere else a drop is a short notification.
+	 */
+	private void flushXpDrop(boolean panelTaken, boolean progressPage)
+	{
+		if (!config.xpDrops() || panelTaken)
+		{
+			pendingDropXp = 0;
+			pendingDropSkill = null;
+			return;
+		}
+		long now = System.currentTimeMillis();
+		if (pendingDropXp <= 0 || now < nextDropMs)
+		{
+			return;
+		}
+		XpDropDirection direction = config.xpDropDirection();
+		long shownMs;
+		if (direction == XpDropDirection.IN_PLACE && progressPage)
+		{
+			inPlaceDropText = fitXpDropText(pendingDropXp);
+			inPlaceDropUntilMs = now + AwtrixClient.XP_DROP_IN_PLACE_MS;
+			shownMs = AwtrixClient.XP_DROP_IN_PLACE_MS;
+		}
+		else
+		{
+			String icon = pendingDropSkill == null ? null : SkillActivities.levelUpIcon(pendingDropSkill);
+			String text = direction.isHorizontal() ? xpDropText(pendingDropXp) : fitXpDropText(pendingDropXp);
+			shownMs = awtrixClient.showXpDrop(text, XP_DROP_COLOR, icon, direction);
+		}
+		nextDropMs = now + shownMs;
+		pendingDropXp = 0;
+		pendingDropSkill = null;
+	}
+
+	static String xpDropText(int xp)
+	{
+		return "+" + xp + " xp";
+	}
+
+	/**
+	 * Drops that do not scroll sideways have to fit beside the icon, so the unit shrinks or goes.
+	 */
+	static String fitXpDropText(int xp)
+	{
+		for (String text : new String[] {xpDropText(xp), "+" + xp + "xp"})
+		{
+			if (XpDropGif.textWidth(text) <= XpDropGif.WIDTH)
+			{
+				return text;
+			}
+		}
+		return "+" + xp;
 	}
 
 	private void refreshClock()
@@ -185,8 +421,11 @@ public class UlanziOsrsPlugin extends Plugin
 			int energy = Math.min(100, Math.max(0, client.getEnergy() / 100));
 			int spec = Math.min(100, Math.max(0, client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT) / 10));
 
-			boolean lowHp = config.lowHitpointsEnabled() && hitpoints <= config.lowHitpointsThreshold();
-			boolean lowPray = config.lowPrayerEnabled() && prayer <= config.lowPrayerThreshold();
+			ThresholdUnit unit = config.thresholdUnit();
+			boolean lowHp = config.lowHitpointsEnabled()
+				&& unit.isLow(hitpoints, hitpointsMax, config.lowHitpointsThreshold());
+			boolean lowPray = config.lowPrayerEnabled()
+				&& unit.isLow(prayer, prayerMax, config.lowPrayerThreshold());
 			SkillActivity activity = currentActivity();
 			boolean afk = config.afkEnabled() && isAfk();
 			if (!afk && afkHeld)
@@ -201,24 +440,25 @@ public class UlanziOsrsPlugin extends Plugin
 			fireThresholdPulses(hitpoints, prayer, lowHp, lowPray, display);
 
 			OverlayKind chosen = chooseOverlay(afk, lowHp, lowPray);
+			AlertDisplayMode mode = chosen == OverlayKind.AFK ? config.afkDisplay() : display;
+			flushXpDrop(chosen != null && mode.usesFullPanel(),
+				chosen == null && activity != null && showsSkillProgress());
 			if (chosen != null)
 			{
-				if (display.usesFullPanel())
+				if (afkHeld && !(chosen == OverlayKind.AFK && mode.usesFullPanel()))
+				{
+					awtrixClient.dismissAfk();
+					afkHeld = false;
+				}
+				if (mode.usesFullPanel())
 				{
 					showFullPanelOverlay(chosen, hitpoints, prayer);
 				}
-				if (display.usesStatsView())
+				if (mode.usesStatsView())
 				{
 					showStatsViewOverlay(chosen, hitpoints, hitpointsMax, prayer, prayerMax, energy, spec, lowHp, lowPray, activity);
 				}
-				if (display.usesFullPanel() && !display.usesStatsView())
-				{
-					return;
-				}
-				if (display.usesStatsView())
-				{
-					return;
-				}
+				return;
 			}
 
 			clearPanelOverlays(afk);
@@ -416,10 +656,6 @@ public class UlanziOsrsPlugin extends Plugin
 	private void showStatsViewOverlay(OverlayKind kind, int hitpoints, int hitpointsMax, int prayer, int prayerMax,
 		int energy, int spec, boolean lowHp, boolean lowPray, SkillActivity activity)
 	{
-		// Never leave a full-panel AFK notification up in stats/compact alert mode.
-		awtrixClient.dismissAfk();
-		afkHeld = false;
-
 		switch (kind)
 		{
 			case AFK:
@@ -469,6 +705,12 @@ public class UlanziOsrsPlugin extends Plugin
 	private void pushStats(int hitpoints, int hitpointsMax, int prayer, int prayerMax, int energy, int spec,
 		boolean lowHp, boolean lowPray, OverlayKind focus, SkillActivity activity)
 	{
+		if (focus == null && activity != null && showsSkillProgress())
+		{
+			pushSkillProgress(activity);
+			return;
+		}
+
 		String activityIcon = activity == null ? null : activity.iconData();
 		if (!config.statsEnabled())
 		{
@@ -483,19 +725,9 @@ public class UlanziOsrsPlugin extends Plugin
 			return;
 		}
 
-		boolean flashHp = lowHp && config.lowHpFlash()
-			&& (config.alertDisplayMode().usesStatsView() || config.compactFlashLowHp());
-		boolean flashPray = lowPray && config.lowPrayerFlash()
-			&& (config.alertDisplayMode().usesStatsView() || config.compactFlashLowPrayer());
-
-		if (flashHp || flashPray)
-		{
-			compactFlashOn = !compactFlashOn;
-		}
-		else
-		{
-			compactFlashOn = false;
-		}
+		boolean flashHp = lowHp && config.lowHpFlash();
+		boolean flashPray = lowPray && config.lowPrayerFlash();
+		compactFlashOn = (flashHp || flashPray) && !compactFlashOn;
 
 		Color hpColor = AwtrixClient.hpColor(hitpoints, hitpointsMax);
 		if (flashHp)
@@ -505,7 +737,7 @@ public class UlanziOsrsPlugin extends Plugin
 		Color prayColor = PRAYER_COLOR;
 		if (flashPray)
 		{
-			prayColor = compactFlashOn ? PRAYER_COLOR : new Color(0, 20, 40);
+			prayColor = compactFlashOn ? PRAYER_COLOR : PRAYER_FLASH_OFF;
 		}
 
 		int hpPercent = hitpointsMax <= 0 ? 0 : Math.min(100, Math.max(0, (hitpoints * 100) / hitpointsMax));
@@ -531,46 +763,63 @@ public class UlanziOsrsPlugin extends Plugin
 		{
 			int progress = config.hitpointsStyle().showsBar() ? hpPercent : -1;
 			awtrixClient.pushBigStat("", String.valueOf(hitpoints), hpColor, progress,
-				tintMode.tintsValues() ? tint : Color.RED, afkBackground, activityIcon);
+				tintMode.tintsValues() ? tint : Color.RED, afkBackground,
+				activityIcon != null ? activityIcon : PixelIcon.HITPOINTS.iconData());
 			return;
 		}
 		if (focus == OverlayKind.LOW_PRAYER && config.statsLayout() == StatsLayout.BIG)
 		{
 			int progress = config.prayerStyle().showsBar() ? prayerPercent : -1;
-			awtrixClient.pushBigStat("", String.valueOf(prayer), prayColor, progress,
-				tintMode.tintsValues() ? tint : Color.BLACK, afkBackground, activityIcon);
+			awtrixClient.pushBigStat("", String.valueOf(prayer), prayColor, progress, prayColor, afkBackground,
+				activityIcon != null ? activityIcon : SkillActivity.PRAYER.iconData());
 			return;
 		}
 
-		if (config.statsLayout() == StatsLayout.COMPACT || focus == OverlayKind.AFK
-			|| focus == OverlayKind.LOW_HP || focus == OverlayKind.LOW_PRAYER)
+		if (config.statsLayout() == StatsLayout.COMPACT || focus != null)
 		{
-			List<AwtrixClient.TextFragment> fragments = new ArrayList<>();
-			List<AwtrixClient.ColumnBar> bars = new ArrayList<>();
-			boolean first = true;
-
+			String label = null;
+			Color labelColor = null;
 			if (focus == OverlayKind.AFK && config.afkCompactLabel())
 			{
-				boolean labelOn = !compactFlashOn;
-				Color afkLabelColor = tintMode.tintsValues() && tint != null
+				label = AwtrixClient.truncate(config.afkText(), 4);
+				labelColor = tintMode.tintsValues() && tint != null
 					? tint
-					: (labelOn ? config.afkTextColor() : Color.DARK_GRAY);
-				fragments.add(new AwtrixClient.TextFragment(AwtrixClient.truncate(config.afkText(), 4), afkLabelColor));
-				first = false;
+					: (!compactFlashOn ? config.afkTextColor() : Color.DARK_GRAY);
 			}
 
-			Color hpDraw = flashHp ? hpColor : barColor;
 			boolean routine = focus == null || focus == OverlayKind.AFK;
-			first = appendCompactStat(fragments, bars, config.showHitpoints() || focus == OverlayKind.LOW_HP,
-				config.hitpointsStyle(), hitpoints, hpPercent, hpDraw, spaceColor, first);
-			first = appendCompactStat(fragments, bars, config.showPrayer() || focus == OverlayKind.LOW_PRAYER,
-				config.prayerStyle(), prayer, prayerPercent, prayColor, spaceColor, first);
+			StatStyle hpStyle = focus == OverlayKind.LOW_HP ? atLeastValue(config.hitpointsStyle()) : config.hitpointsStyle();
+			StatStyle prayerStyle = focus == OverlayKind.LOW_PRAYER ? atLeastValue(config.prayerStyle()) : config.prayerStyle();
+			List<CompactStat> line = new ArrayList<>();
+			addCompactStat(line, hpStyle, hitpoints, hpPercent, flashHp ? hpColor : barColor);
+			addCompactStat(line, prayerStyle, prayer, prayerPercent, prayColor);
 			if (routine)
 			{
-				first = appendCompactStat(fragments, bars, config.showEnergy(),
-					config.energyStyle(), energy, energy, energyColor, spaceColor, first);
-				appendCompactStat(fragments, bars, config.showSpec(),
-					config.specStyle(), spec, spec, specColor, spaceColor, first);
+				addCompactStat(line, config.energyStyle(), energy, energy, energyColor);
+				addCompactStat(line, config.specStyle(), spec, spec, specColor);
+			}
+			fitCompactLine(line, label, activityIcon != null);
+
+			List<AwtrixClient.TextFragment> fragments = new ArrayList<>();
+			List<AwtrixClient.ColumnBar> bars = new ArrayList<>();
+			if (label != null)
+			{
+				fragments.add(new AwtrixClient.TextFragment(label, labelColor));
+			}
+			for (CompactStat stat : line)
+			{
+				if (stat.style.showsBar())
+				{
+					bars.add(new AwtrixClient.ColumnBar(stat.percent, stat.color));
+				}
+				if (stat.style.showsValue())
+				{
+					if (!fragments.isEmpty())
+					{
+						fragments.add(new AwtrixClient.TextFragment(" ", spaceColor));
+					}
+					fragments.add(new AwtrixClient.TextFragment(String.valueOf(stat.value), stat.color));
+				}
 			}
 
 			if (fragments.isEmpty() && activity != null && bars.isEmpty())
@@ -588,27 +837,10 @@ public class UlanziOsrsPlugin extends Plugin
 		}
 
 		List<BigStat> stats = new ArrayList<>();
-		if (config.showHitpoints())
-		{
-			int progress = config.hitpointsStyle().showsBar() ? hpPercent : -1;
-			stats.add(new BigStat(String.valueOf(hitpoints), hpColor, progress, hpColor));
-		}
-		if (config.showPrayer())
-		{
-			int progress = config.prayerStyle().showsBar() ? prayerPercent : -1;
-			stats.add(new BigStat(String.valueOf(prayer), prayColor, progress,
-				tintMode.tintsValues() ? tint : Color.BLACK));
-		}
-		if (config.showEnergy())
-		{
-			int progress = config.energyStyle().showsBar() ? energy : -1;
-			stats.add(new BigStat(String.valueOf(energy), energyColor, progress, energyColor));
-		}
-		if (config.showSpec())
-		{
-			int progress = config.specStyle().showsBar() ? spec : -1;
-			stats.add(new BigStat(String.valueOf(spec), specColor, progress, specColor));
-		}
+		addBigStat(stats, config.hitpointsStyle(), hitpoints, hpPercent, hpColor, PixelIcon.HITPOINTS.iconData());
+		addBigStat(stats, config.prayerStyle(), prayer, prayerPercent, prayColor, SkillActivity.PRAYER.iconData());
+		addBigStat(stats, config.energyStyle(), energy, energy, energyColor, PixelIcon.RUN_ENERGY.iconData());
+		addBigStat(stats, config.specStyle(), spec, spec, specColor, PixelIcon.SPECIAL_ATTACK.iconData());
 
 		if (stats.isEmpty())
 		{
@@ -639,30 +871,192 @@ public class UlanziOsrsPlugin extends Plugin
 		}
 
 		BigStat current = stats.get(bigStatIndex);
-		awtrixClient.pushBigStat("", current.value, current.color, current.progress, current.progressColor, afkBackground, activityIcon);
+		awtrixClient.pushBigStat("", current.value, current.color, current.progress, current.color, afkBackground,
+			activityIcon != null ? activityIcon : current.icon);
 	}
 
-	private boolean appendCompactStat(List<AwtrixClient.TextFragment> fragments, List<AwtrixClient.ColumnBar> bars,
-		boolean show, StatStyle style, int value, int percent, Color color, Color spaceColor, boolean first)
+	private static void addBigStat(List<BigStat> stats, StatStyle style, int value, int percent, Color color, String icon)
 	{
-		if (!show)
+		if (style.isShown())
 		{
-			return first;
+			stats.add(new BigStat(String.valueOf(value), color, style.showsBar() ? percent : -1, icon));
 		}
-		if (style.showsBar())
+	}
+
+	private static void addCompactStat(List<CompactStat> line, StatStyle style, int value, int percent, Color color)
+	{
+		if (style.isShown())
 		{
-			bars.add(new AwtrixClient.ColumnBar(percent, color));
+			line.add(new CompactStat(style, value, percent, color));
 		}
-		if (!style.showsValue())
+	}
+
+	private static StatStyle atLeastValue(StatStyle style)
+	{
+		return style.isShown() ? style : StatStyle.VALUE;
+	}
+
+	/**
+	 * AWTRIX's small font is 4px per character and 2px per space. An icon takes the left 8px
+	 * and each bar 2px on the right. Values that no longer fit turn into bars, last one first.
+	 */
+	static void fitCompactLine(List<CompactStat> line, String label, boolean icon)
+	{
+		for (int i = line.size() - 1; i >= 0 && !compactLineFits(line, label, icon); i--)
 		{
-			return first;
+			CompactStat stat = line.get(i);
+			if (stat.style.showsValue())
+			{
+				stat.style = StatStyle.BAR;
+			}
 		}
-		if (!first)
+	}
+
+	static boolean compactLineFits(List<CompactStat> line, String label, boolean icon)
+	{
+		List<String> words = new ArrayList<>();
+		if (label != null)
 		{
-			fragments.add(new AwtrixClient.TextFragment(" ", spaceColor));
+			words.add(label);
 		}
-		fragments.add(new AwtrixClient.TextFragment(String.valueOf(value), color));
-		return false;
+		int bars = 0;
+		for (CompactStat stat : line)
+		{
+			if (stat.style.showsBar())
+			{
+				bars++;
+			}
+			if (stat.style.showsValue())
+			{
+				words.add(String.valueOf(stat.value));
+			}
+		}
+		int available = PANEL_WIDTH - (icon ? ICON_WIDTH : 0) - bars * BAR_WIDTH;
+		return compactTextWidth(words) <= available;
+	}
+
+	static int compactTextWidth(List<String> words)
+	{
+		if (words.isEmpty())
+		{
+			return 0;
+		}
+		int chars = 0;
+		for (String word : words)
+		{
+			chars += word.length();
+		}
+		// The last character's 1px spacing column is blank.
+		return chars * CHAR_WIDTH + (words.size() - 1) * SPACE_WIDTH - 1;
+	}
+
+	static boolean isLevelUp(Integer previousLevel, int level)
+	{
+		return previousLevel != null && level > previousLevel;
+	}
+
+	private boolean showsSkillProgress()
+	{
+		return config.skillProgress().isShown() && (!activityFromCombat || config.skillProgressInCombat());
+	}
+
+	private void pushSkillProgress(SkillActivity activity)
+	{
+		Skill skill = activity == SkillActivity.MELEE && meleeSkill != null
+			? meleeSkill
+			: SkillActivities.skillFor(activity);
+		if (skill == null)
+		{
+			pushActivityLabel(activity, null);
+			return;
+		}
+		long now = System.currentTimeMillis();
+		int xp = client.getSkillExperience(skill);
+		int level = Math.min(Experience.MAX_REAL_LEVEL, Experience.getLevelForXp(xp));
+		boolean rateTurn = (now / (config.statsRotateSeconds() * 1000L)) % 2 == 1;
+		List<AwtrixClient.TextFragment> text;
+		if (inPlaceDropText != null && now < inPlaceDropUntilMs)
+		{
+			text = new ArrayList<>();
+			text.add(new AwtrixClient.TextFragment(inPlaceDropText, XP_DROP_COLOR));
+		}
+		else
+		{
+			text = skillProgressText(config.skillProgress(), level, xpPerHour(skill, now), rateTurn, activity.color());
+		}
+		awtrixClient.pushSkillProgress(text, levelProgress(xp),
+			config.progressGradient().stops(activity.color()), activity.iconData());
+	}
+
+	/**
+	 * RuneLite's XP Tracker reports 0 while it has nothing for the skill or is switched off,
+	 * and then our own estimate is used.
+	 */
+	private int xpPerHour(Skill skill, long nowMs)
+	{
+		if (config.xpRateSource() != XpRateSource.XP_TRACKER)
+		{
+			return xpRates.perHour(skill, nowMs);
+		}
+		try
+		{
+			int tracked = xpTrackerService.getXpHr(skill);
+			if (tracked > 0)
+			{
+				return tracked;
+			}
+		}
+		catch (RuntimeException ex)
+		{
+			log.debug("XP Tracker rate unavailable for {}", skill, ex);
+		}
+		return xpRates.perHour(skill, nowMs);
+	}
+
+	/**
+	 * Level and rate side by side when they fit beside the icon, otherwise one at a time.
+	 * The rate is left out until there is one.
+	 */
+	static List<AwtrixClient.TextFragment> skillProgressText(SkillProgressMode mode, int level, int perHour,
+		boolean rateTurn, Color levelColor)
+	{
+		List<AwtrixClient.TextFragment> text = new ArrayList<>();
+		String levelText = String.valueOf(level);
+		boolean hasRate = perHour >= 0 && mode != SkillProgressMode.LEVEL;
+		String rate = hasRate ? XpRateTracker.format(perHour) : null;
+		boolean both = hasRate && mode == SkillProgressMode.BOTH
+			&& compactTextWidth(Arrays.asList(levelText, rate)) <= PANEL_WIDTH - ICON_WIDTH;
+
+		if (both)
+		{
+			text.add(new AwtrixClient.TextFragment(levelText, levelColor));
+			text.add(new AwtrixClient.TextFragment(" ", Color.DARK_GRAY));
+			text.add(new AwtrixClient.TextFragment(rate, XP_RATE_COLOR));
+		}
+		else if (hasRate && (mode == SkillProgressMode.XP_RATE || rateTurn))
+		{
+			text.add(new AwtrixClient.TextFragment(rate + "/h", XP_RATE_COLOR));
+		}
+		else
+		{
+			text.add(new AwtrixClient.TextFragment(levelText, levelColor));
+		}
+		return text;
+	}
+
+	/**
+	 * Percent of the way from this level to the next. A maxed skill shows a full bar.
+	 */
+	static int levelProgress(int xp)
+	{
+		int level = Experience.getLevelForXp(xp);
+		if (level >= Experience.MAX_REAL_LEVEL)
+		{
+			return 100;
+		}
+		int start = Experience.getXpForLevel(level);
+		int next = Experience.getXpForLevel(level + 1);
+		return (int) Math.max(0L, Math.min(100L, (xp - start) * 100L / (next - start)));
 	}
 
 	private void pushActivityLabel(SkillActivity activity, Color background)
@@ -674,6 +1068,7 @@ public class UlanziOsrsPlugin extends Plugin
 
 	private SkillActivity currentActivity()
 	{
+		activityFromCombat = false;
 		Player player = client.getLocalPlayer();
 		if (!config.showActivity() || player == null)
 		{
@@ -706,6 +1101,7 @@ public class UlanziOsrsPlugin extends Plugin
 		{
 			return null;
 		}
+		activityFromCombat = true;
 		return CombatStyles.current(client);
 	}
 
@@ -883,8 +1279,18 @@ public class UlanziOsrsPlugin extends Plugin
 		afkHeld = false;
 		activityTracker.reset();
 		skillXp.clear();
+		skillLevels.clear();
 		lastPlayerLocation = null;
 		lastCombatMs = 0L;
+		activityFromCombat = false;
+		xpRates.reset();
+		tickXpGains.clear();
+		meleeSkill = null;
+		pendingDropXp = 0;
+		pendingDropSkill = null;
+		nextDropMs = 0L;
+		inPlaceDropText = null;
+		inPlaceDropUntilMs = 0L;
 	}
 
 	private static final class BigStat
@@ -892,14 +1298,30 @@ public class UlanziOsrsPlugin extends Plugin
 		private final String value;
 		private final Color color;
 		private final int progress;
-		private final Color progressColor;
+		private final String icon;
 
-		private BigStat(String value, Color color, int progress, Color progressColor)
+		private BigStat(String value, Color color, int progress, String icon)
 		{
 			this.value = value;
 			this.color = color;
 			this.progress = progress;
-			this.progressColor = progressColor;
+			this.icon = icon;
+		}
+	}
+
+	static final class CompactStat
+	{
+		StatStyle style;
+		final int value;
+		final int percent;
+		final Color color;
+
+		CompactStat(StatStyle style, int value, int percent, Color color)
+		{
+			this.style = style;
+			this.value = value;
+			this.percent = percent;
+			this.color = color;
 		}
 	}
 }

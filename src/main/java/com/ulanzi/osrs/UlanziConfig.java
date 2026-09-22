@@ -22,31 +22,38 @@ public interface UlanziConfig extends Config
 
 	@ConfigSection(
 		name = "AFK",
-		description = "Full-panel AFK indicator.",
+		description = "Idle indicator.",
 		position = 1
 	)
 	String afkSection = "afk";
 
 	@ConfigSection(
 		name = "Stats",
-		description = "Hitpoints, prayer, energy, special attack, and an optional skilling icon.",
+		description = "Hitpoints, prayer, energy, special attack, and the activity icon.",
 		position = 2
 	)
 	String statsSection = "stats";
 
 	@ConfigSection(
-		name = "Alerts",
-		description = "Low hitpoints and prayer warnings.",
+		name = "Skill progress",
+		description = "Level, progress to the next level, XP per hour, and XP drops while you train.",
 		position = 3
+	)
+	String skillProgressSection = "skillProgress";
+
+	@ConfigSection(
+		name = "Alerts",
+		description = "Low hitpoints and prayer warnings, and what wins when several are active.",
+		position = 4
 	)
 	String alertsSection = "alerts";
 
 	@ConfigSection(
-		name = "Priority",
-		description = "What wins when AFK and low HP/prayer overlap.",
-		position = 4
+		name = "Level ups",
+		description = "Celebrate a new level on the clock.",
+		position = 5
 	)
-	String prioritySection = "priority";
+	String levelUpSection = "levelUps";
 
 	@ConfigItem(
 		keyName = "host",
@@ -88,7 +95,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "testConnection",
 		name = "Test connection",
-		description = "Turn this on to send a short OK notification to the clock. It turns itself off afterwards.",
+		description = "Turn this on to send a short OK to the clock. The result is posted in the game chat, and the box turns itself off.",
 		position = 3,
 		section = connectionSection
 	)
@@ -100,7 +107,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "afkEnabled",
 		name = "AFK indicator",
-		description = "Take over the whole display when you go idle. Walking, running, or clicking to move clears it. Moving the mouse does not.",
+		description = "Show AFK when you go idle. Walking, running, or clicking to move clears it. Moving the mouse does not.",
 		position = 0,
 		section = afkSection
 	)
@@ -110,10 +117,22 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "afkDisplay",
+		name = "AFK display",
+		description = "Full panel takes over the whole display with the AFK text and effect. On the stats page keeps your stats up and marks them with the tint or label below.",
+		position = 1,
+		section = afkSection
+	)
+	default AlertDisplayMode afkDisplay()
+	{
+		return AlertDisplayMode.FULL_PANEL;
+	}
+
+	@ConfigItem(
 		keyName = "afkSeconds",
 		name = "AFK after",
 		description = "Seconds without mouse or keyboard input before showing AFK. 0 shows it on the next client tick after input stops. Hovering afterward leaves it up until your character is active again.",
-		position = 1,
+		position = 2,
 		section = afkSection
 	)
 	@Range(min = 0, max = 600)
@@ -126,8 +145,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "afkText",
 		name = "AFK text",
-		description = "Text shown on the panel while AFK. Keep it short for the large font.",
-		position = 2,
+		description = "Text shown on the full panel while AFK. Keep it short for the large font.",
+		position = 3,
 		section = afkSection
 	)
 	default String afkText()
@@ -138,8 +157,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "afkEffect",
 		name = "AFK effect",
-		description = "Visual style. Rainbow/Lava/Ocean/Party/Heat waves scroll color across the text. Plasma and Looking eyes use animated backgrounds.",
-		position = 3,
+		description = "Full panel style. The wave effects scroll color across the text. Plasma and Looking eyes use animated backgrounds.",
+		position = 4,
 		section = afkSection
 	)
 	default AfkEffect afkEffect()
@@ -150,8 +169,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "afkTextColor",
 		name = "AFK text color",
-		description = "Used when AFK effect is Solid.",
-		position = 4,
+		description = "Used by Solid, Plasma, and Looking eyes. The wave effects color the text themselves.",
+		position = 5,
 		section = afkSection
 	)
 	default Color afkTextColor()
@@ -162,8 +181,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "afkBackgroundColor",
 		name = "AFK background",
-		description = "Solid background when the effect is not a full-panel animation.",
-		position = 5,
+		description = "Used by Solid and the wave effects. Plasma and Looking eyes draw their own background.",
+		position = 6,
 		section = afkSection
 	)
 	default Color afkBackgroundColor()
@@ -174,8 +193,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "afkWaveSpeed",
 		name = "Wave speed",
-		description = "How fast palette colors travel across AFK text (passes per second).",
-		position = 6,
+		description = "Wave effects only. How fast the colors travel across the text.",
+		position = 7,
 		section = afkSection
 	)
 	@Range(min = 1, max = 50)
@@ -187,8 +206,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "afkBlink",
 		name = "Blink AFK text",
-		description = "Blink AFK text. Ignored for palette wave effects.",
-		position = 7,
+		description = "Solid effect only.",
+		position = 8,
 		section = afkSection
 	)
 	default boolean afkBlink()
@@ -199,8 +218,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "afkBlinkMs",
 		name = "Blink period",
-		description = "Blink period in milliseconds when blink is enabled.",
-		position = 8,
+		description = "Blink period in milliseconds when blink is on.",
+		position = 9,
 		section = afkSection
 	)
 	@Range(min = 100, max = 5000)
@@ -213,8 +232,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "afkSound",
 		name = "AFK buzz",
-		description = "Play a short RTTTL tone on the buzzer when AFK starts.",
-		position = 9,
+		description = "Play a short tone on the buzzer when AFK starts.",
+		position = 10,
 		section = afkSection
 	)
 	default boolean afkSound()
@@ -224,21 +243,21 @@ public interface UlanziConfig extends Config
 
 	@ConfigItem(
 		keyName = "afkTintMode",
-		name = "AFK tint mode",
-		description = "On stats/compact alert mode: recolor all values and the health bar, fill the panel background, both, or off.",
-		position = 10,
+		name = "AFK tint on stats",
+		description = "When AFK display is On the stats page: recolor the values and bars, fill the background, both, or off.",
+		position = 11,
 		section = afkSection
 	)
 	default AfkTintMode afkTintMode()
 	{
-		return AfkTintMode.OFF;
+		return AfkTintMode.VALUES;
 	}
 
 	@ConfigItem(
 		keyName = "afkTintColor",
 		name = "AFK tint color",
-		description = "Color used for AFK tint mode (values/health bar and/or background). Gray works well as an idle signal.",
-		position = 11,
+		description = "Color for the AFK tint on the stats page. Gray works well as an idle signal.",
+		position = 12,
 		section = afkSection
 	)
 	default Color afkTintColor()
@@ -248,9 +267,9 @@ public interface UlanziConfig extends Config
 
 	@ConfigItem(
 		keyName = "afkCompactLabel",
-		name = "Show AFK label on compact",
-		description = "Also prepend a flashing AFK label on the compact stats line. Leave off if tint alone is enough.",
-		position = 12,
+		name = "AFK label on stats",
+		description = "When AFK display is On the stats page, also put a flashing AFK label in front of the values.",
+		position = 13,
 		section = afkSection
 	)
 	default boolean afkCompactLabel()
@@ -261,7 +280,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "statsEnabled",
 		name = "Show stats",
-		description = "Push a rotating stats page to the clock while you are logged in and no overlay is taking over.",
+		description = "Push a stats page to the clock while you are logged in and no overlay is taking over.",
 		position = 0,
 		section = statsSection
 	)
@@ -273,7 +292,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "statsLayout",
 		name = "Layout",
-		description = "Big shows one large stat at a time. Compact shows each stat as a number or a vertical bar.",
+		description = "Big shows one large stat at a time with its orb icon. Compact shows every stat on one line.",
 		position = 1,
 		section = statsSection
 	)
@@ -283,22 +302,10 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "showHitpoints",
-		name = "Hitpoints",
-		description = "Include hitpoints on the stats page.",
-		position = 2,
-		section = statsSection
-	)
-	default boolean showHitpoints()
-	{
-		return true;
-	}
-
-	@ConfigItem(
 		keyName = "hitpointsStyle",
-		name = "Hitpoints as",
-		description = "Compact layout: Value prints the number, Bar draws a vertical bar, and Both shows the number and the bar.",
-		position = 3,
+		name = "Hitpoints",
+		description = "Value prints the number, Bar draws a bar, and Both shows the two. Compact bars are vertical on the right edge; Big bars run along the bottom.",
+		position = 2,
 		section = statsSection
 	)
 	default StatStyle hitpointsStyle()
@@ -307,22 +314,10 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "showPrayer",
-		name = "Prayer",
-		description = "Include prayer on the stats page.",
-		position = 4,
-		section = statsSection
-	)
-	default boolean showPrayer()
-	{
-		return true;
-	}
-
-	@ConfigItem(
 		keyName = "prayerStyle",
-		name = "Prayer as",
-		description = "Compact layout: Value prints the number, Bar draws a vertical bar, and Both shows the number and the bar.",
-		position = 5,
+		name = "Prayer",
+		description = "Value prints the number, Bar draws a bar, and Both shows the two. Compact bars are vertical on the right edge; Big bars run along the bottom.",
+		position = 3,
 		section = statsSection
 	)
 	default StatStyle prayerStyle()
@@ -331,22 +326,10 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "showEnergy",
-		name = "Run energy",
-		description = "Include run energy on the stats page.",
-		position = 6,
-		section = statsSection
-	)
-	default boolean showEnergy()
-	{
-		return true;
-	}
-
-	@ConfigItem(
 		keyName = "energyStyle",
-		name = "Run energy as",
-		description = "Compact layout: Value prints the number, Bar draws a vertical bar, and Both shows the number and the bar.",
-		position = 7,
+		name = "Run energy",
+		description = "Value prints the number, Bar draws a bar, and Both shows the two. Compact bars are vertical on the right edge; Big bars run along the bottom.",
+		position = 4,
 		section = statsSection
 	)
 	default StatStyle energyStyle()
@@ -355,34 +338,22 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "showSpec",
-		name = "Special attack",
-		description = "Include special-attack percent on the stats page.",
-		position = 8,
-		section = statsSection
-	)
-	default boolean showSpec()
-	{
-		return false;
-	}
-
-	@ConfigItem(
 		keyName = "specStyle",
-		name = "Special attack as",
-		description = "Compact layout: Value prints the number, Bar draws a vertical bar, and Both shows the number and the bar.",
-		position = 9,
+		name = "Special attack",
+		description = "Value prints the number, Bar draws a bar, and Both shows the two. Compact bars are vertical on the right edge; Big bars run along the bottom.",
+		position = 5,
 		section = statsSection
 	)
 	default StatStyle specStyle()
 	{
-		return StatStyle.VALUE;
+		return StatStyle.OFF;
 	}
 
 	@ConfigItem(
 		keyName = "statsRotateSeconds",
 		name = "Rotate every",
-		description = "How long each big-layout stat stays on screen before rotating.",
-		position = 10,
+		description = "Big layout: how long each stat stays on screen before rotating.",
+		position = 6,
 		section = statsSection
 	)
 	@Range(min = 1, max = 30)
@@ -393,34 +364,10 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "compactFlashLowHp",
-		name = "Always flash low HP on compact",
-		description = "When using compact layout, flash HP digits while low even if Alert display is Full panel only.",
-		position = 11,
-		section = statsSection
-	)
-	default boolean compactFlashLowHp()
-	{
-		return true;
-	}
-
-	@ConfigItem(
-		keyName = "compactFlashLowPrayer",
-		name = "Always flash low prayer on compact",
-		description = "When using compact layout, flash prayer while low even if Alert display is Full panel only.",
-		position = 12,
-		section = statsSection
-	)
-	default boolean compactFlashLowPrayer()
-	{
-		return true;
-	}
-
-	@ConfigItem(
 		keyName = "showActivity",
 		name = "Activity icon",
-		description = "Show an icon while skilling, and a melee, ranged, or magic icon while you are attacking with that style.",
-		position = 13,
+		description = "Show an icon while skilling, and a melee, ranged, or magic icon while you are attacking with that style. If the compact line no longer fits beside it, the last values switch to bars.",
+		position = 7,
 		section = statsSection
 	)
 	default boolean showActivity()
@@ -432,7 +379,7 @@ public interface UlanziConfig extends Config
 		keyName = "activityHoldSeconds",
 		name = "Activity hold",
 		description = "Seconds to keep the icon after the action stops. 0 clears it on the next tick. Increase it if walking between trees or rocks makes the icon flicker.",
-		position = 14,
+		position = 8,
 		section = statsSection
 	)
 	@Range(min = 0, max = 30)
@@ -443,9 +390,81 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "skillProgress",
+		name = "While training",
+		description = "Replace the stats with the skill you are training while the activity icon is up. The bottom row fills toward the next level. Level and XP/h shows both when they fit and alternates when they do not. Needs Activity icon on.",
+		position = 0,
+		section = skillProgressSection
+	)
+	default SkillProgressMode skillProgress()
+	{
+		return SkillProgressMode.OFF;
+	}
+
+	@ConfigItem(
+		keyName = "xpRateSource",
+		name = "XP/h source",
+		description = "This plugin times each skill from your second XP drop and starts over after 5 minutes without XP. RuneLite XP Tracker matches its panel and globes, including its pause and reset settings; while it has no rate, this plugin's is used.",
+		position = 1,
+		section = skillProgressSection
+	)
+	default XpRateSource xpRateSource()
+	{
+		return XpRateSource.CLOCK;
+	}
+
+	@ConfigItem(
+		keyName = "progressGradient",
+		name = "Progress bar",
+		description = "Colors of the bar toward the next level. The gradient is revealed as the bar fills.",
+		position = 2,
+		section = skillProgressSection
+	)
+	default ProgressGradient progressGradient()
+	{
+		return ProgressGradient.SKILL;
+	}
+
+	@ConfigItem(
+		keyName = "skillProgressInCombat",
+		name = "Also in combat",
+		description = "Show the combat skill's progress while fighting too. Off keeps hitpoints and prayer up in combat.",
+		position = 3,
+		section = skillProgressSection
+	)
+	default boolean skillProgressInCombat()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "xpDrops",
+		name = "XP drops",
+		description = "Fly each XP gain, like +175 xp, across the panel. Gains that land while one is still flying are added to the next.",
+		position = 4,
+		section = skillProgressSection
+	)
+	default boolean xpDrops()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "xpDropDirection",
+		name = "XP drop direction",
+		description = "Which way XP drops travel across the panel. In place does not move: on the skill progress page it briefly replaces the level and XP/h, elsewhere it shows still for a moment.",
+		position = 5,
+		section = skillProgressSection
+	)
+	default XpDropDirection xpDropDirection()
+	{
+		return XpDropDirection.LEFT;
+	}
+
+	@ConfigItem(
 		keyName = "alertDisplayMode",
 		name = "Alert display",
-		description = "Full panel uses popup takeovers. On stats keeps the compact/stats page and flashes or shows AFK there. Both does popups and inline.",
+		description = "Full panel takes over the display with a flashing popup. On the stats page flashes the value in place. Both does the two.",
 		position = 0,
 		section = alertsSection
 	)
@@ -455,10 +474,22 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "thresholdUnit",
+		name = "Thresholds in",
+		description = "Percent of max scales with your level, so 25 means a quarter of your hitpoints. Points compares the number directly.",
+		position = 1,
+		section = alertsSection
+	)
+	default ThresholdUnit thresholdUnit()
+	{
+		return ThresholdUnit.PERCENT;
+	}
+
+	@ConfigItem(
 		keyName = "lowHitpointsEnabled",
 		name = "Low hitpoints alert",
 		description = "Warn when hitpoints are at or below the threshold.",
-		position = 1,
+		position = 2,
 		section = alertsSection
 	)
 	default boolean lowHitpointsEnabled()
@@ -469,21 +500,21 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "lowHitpointsThreshold",
 		name = "Hitpoints threshold",
-		description = "Alert when boosted hitpoints are at or below this value.",
-		position = 2,
+		description = "Alert when hitpoints are at or below this, in the unit chosen by Thresholds in.",
+		position = 3,
 		section = alertsSection
 	)
 	@Range(min = 1, max = 99)
 	default int lowHitpointsThreshold()
 	{
-		return 20;
+		return 25;
 	}
 
 	@ConfigItem(
 		keyName = "lowHpFlash",
 		name = "Flash low hitpoints",
-		description = "Flash HP (on the stats page and/or as a full-panel popup, depending on Alert display).",
-		position = 3,
+		description = "Flash HP on the stats page or as a popup, depending on Alert display.",
+		position = 4,
 		section = alertsSection
 	)
 	default boolean lowHpFlash()
@@ -494,8 +525,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "lowHpBeep",
 		name = "Beep low hitpoints",
-		description = "Buzz the TC001 when low HP triggers or drops further.",
-		position = 4,
+		description = "Buzz the clock when low HP triggers or drops further.",
+		position = 5,
 		section = alertsSection
 	)
 	default boolean lowHpBeep()
@@ -507,7 +538,7 @@ public interface UlanziConfig extends Config
 		keyName = "lowPrayerEnabled",
 		name = "Low prayer alert",
 		description = "Warn when prayer is at or below the threshold.",
-		position = 5,
+		position = 6,
 		section = alertsSection
 	)
 	default boolean lowPrayerEnabled()
@@ -518,8 +549,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "lowPrayerThreshold",
 		name = "Prayer threshold",
-		description = "Alert when boosted prayer is at or below this value.",
-		position = 6,
+		description = "Alert when prayer is at or below this, in the unit chosen by Thresholds in.",
+		position = 7,
 		section = alertsSection
 	)
 	@Range(min = 1, max = 99)
@@ -531,8 +562,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "lowPrayerFlash",
 		name = "Flash low prayer",
-		description = "Flash prayer (on the stats page and/or as a full-panel popup, depending on Alert display).",
-		position = 7,
+		description = "Flash prayer on the stats page or as a popup, depending on Alert display.",
+		position = 8,
 		section = alertsSection
 	)
 	default boolean lowPrayerFlash()
@@ -543,8 +574,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "lowPrayerBeep",
 		name = "Beep low prayer",
-		description = "Buzz the TC001 when low prayer triggers or drops further.",
-		position = 8,
+		description = "Buzz the clock when low prayer triggers or drops further.",
+		position = 9,
 		section = alertsSection
 	)
 	default boolean lowPrayerBeep()
@@ -555,8 +586,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "realertOnDrop",
 		name = "Flash again on further drop",
-		description = "While still under the threshold, flash/beep again each time HP or prayer falls lower.",
-		position = 9,
+		description = "While still under the threshold, flash and beep again each time HP or prayer falls lower.",
+		position = 10,
 		section = alertsSection
 	)
 	default boolean realertOnDrop()
@@ -567,9 +598,9 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "overlayPriority",
 		name = "When overlapping",
-		description = "AFK first keeps AFK on top. Alerts first lets low HP/prayer take the panel. Rotate cycles through whatever is active.",
-		position = 0,
-		section = prioritySection
+		description = "What shows when AFK and low HP or prayer are active together. AFK first keeps AFK on top, Alerts first lets the warning win, and Rotate cycles through them.",
+		position = 11,
+		section = alertsSection
 	)
 	default OverlayPriority overlayPriority()
 	{
@@ -578,15 +609,39 @@ public interface UlanziConfig extends Config
 
 	@ConfigItem(
 		keyName = "overlayRotateSeconds",
-		name = "Rotate every",
-		description = "How long each active overlay stays when priority is Rotate active.",
-		position = 1,
-		section = prioritySection
+		name = "Rotate overlays every",
+		description = "How long each active overlay stays when When overlapping is Rotate active.",
+		position = 12,
+		section = alertsSection
 	)
 	@Range(min = 1, max = 30)
 	@Units(Units.SECONDS)
 	default int overlayRotateSeconds()
 	{
 		return 3;
+	}
+
+	@ConfigItem(
+		keyName = "levelUpEnabled",
+		name = "Level-up celebration",
+		description = "Show the skill icon and your new level for a few seconds when you level up.",
+		position = 0,
+		section = levelUpSection
+	)
+	default boolean levelUpEnabled()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "levelUpSound",
+		name = "Level-up jingle",
+		description = "Play a short fanfare on the buzzer with the celebration.",
+		position = 1,
+		section = levelUpSection
+	)
+	default boolean levelUpSound()
+	{
+		return true;
 	}
 }

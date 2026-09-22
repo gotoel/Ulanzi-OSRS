@@ -1,8 +1,15 @@
 package com.ulanzi.osrs;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.List;
 import javax.imageio.ImageIO;
 import net.runelite.api.Skill;
 import net.runelite.api.gameval.AnimationID;
@@ -171,21 +178,145 @@ public class SkillActivityTrackerTest
 		Assert.assertTrue(StatStyle.BOTH.showsBar());
 		Assert.assertFalse(StatStyle.BAR.showsValue());
 		Assert.assertFalse(StatStyle.VALUE.showsBar());
+		Assert.assertFalse(StatStyle.OFF.isShown());
+		Assert.assertFalse(StatStyle.OFF.showsValue());
+		Assert.assertFalse(StatStyle.OFF.showsBar());
+	}
+
+	@Test
+	public void percentThresholdScalesWithTheRealLevel()
+	{
+		Assert.assertTrue(ThresholdUnit.PERCENT.isLow(24, 99, 25));
+		Assert.assertFalse(ThresholdUnit.PERCENT.isLow(25, 99, 25));
+		Assert.assertFalse(ThresholdUnit.PERCENT.isLow(10, 10, 25));
+		Assert.assertTrue(ThresholdUnit.PERCENT.isLow(2, 10, 25));
+		Assert.assertTrue(ThresholdUnit.POINTS.isLow(20, 99, 20));
+		Assert.assertFalse(ThresholdUnit.POINTS.isLow(21, 99, 20));
+	}
+
+	@Test
+	public void defaultCompactLineFitsTheBarePanel()
+	{
+		Assert.assertEquals(31, UlanziOsrsPlugin.compactTextWidth(Arrays.asList("99", "70", "100")));
+		List<UlanziOsrsPlugin.CompactStat> line = defaultLine();
+		UlanziOsrsPlugin.fitCompactLine(line, null, false);
+		Assert.assertEquals(StatStyle.VALUE, line.get(2).style);
+	}
+
+	@Test
+	public void compactLineBesideAnIconTurnsTheLastValueIntoABar()
+	{
+		List<UlanziOsrsPlugin.CompactStat> line = defaultLine();
+		UlanziOsrsPlugin.fitCompactLine(line, null, true);
+		Assert.assertEquals(StatStyle.VALUE, line.get(0).style);
+		Assert.assertEquals(StatStyle.VALUE, line.get(1).style);
+		Assert.assertEquals(StatStyle.BAR, line.get(2).style);
+		Assert.assertTrue(UlanziOsrsPlugin.compactLineFits(line, null, true));
+	}
+
+	@Test
+	public void afkLabelBesideAnIconStillFits()
+	{
+		List<UlanziOsrsPlugin.CompactStat> line = defaultLine();
+		UlanziOsrsPlugin.fitCompactLine(line, "AFK", true);
+		Assert.assertEquals(StatStyle.BAR, line.get(0).style);
+		Assert.assertEquals(StatStyle.BAR, line.get(1).style);
+		Assert.assertEquals(StatStyle.BAR, line.get(2).style);
+		Assert.assertTrue(UlanziOsrsPlugin.compactLineFits(line, "AFK", true));
+
+		List<UlanziOsrsPlugin.CompactStat> noIcon = defaultLine();
+		UlanziOsrsPlugin.fitCompactLine(noIcon, "AFK", false);
+		Assert.assertEquals(StatStyle.VALUE, noIcon.get(0).style);
+		Assert.assertEquals(StatStyle.BAR, noIcon.get(1).style);
+		Assert.assertEquals(StatStyle.BAR, noIcon.get(2).style);
+	}
+
+	@Test
+	public void appLoopKeepsTheUsersOrderAndSwitchedOffApps()
+	{
+		String json = "["
+			+ "{\"name\":\"Date\",\"enabled\":true,\"inLoop\":true,\"slot\":1},"
+			+ "{\"name\":\"osrs\",\"enabled\":true,\"inLoop\":true,\"slot\":0},"
+			+ "{\"name\":\"Time\",\"enabled\":true,\"inLoop\":true,\"slot\":2},"
+			+ "{\"name\":\"weather\",\"enabled\":true,\"inLoop\":true,\"slot\":3},"
+			+ "{\"name\":\"Battery\",\"enabled\":false,\"inLoop\":false,\"slot\":null},"
+			+ "{\"name\":\"mymodule\",\"origin\":\"module\"}"
+			+ "]";
+		AwtrixClient.AppLoop loop = AwtrixClient.parseAppLoop(new Gson().fromJson(json, JsonArray.class));
+		Assert.assertEquals(Arrays.asList("Date", "Time", "weather"), loop.order);
+		Assert.assertEquals(Collections.singletonList("Battery"), loop.disabled);
+		Assert.assertEquals("{\"order\":[\"Date\",\"Time\",\"weather\"],\"disabled\":[\"Battery\"]}", loop.toJson().toString());
+	}
+
+	@Test
+	public void connectionErrorsNeverMentionTheAddress()
+	{
+		String[] problems = {
+			AwtrixClient.describe(new java.net.ConnectException("Failed to connect to /192.168.1.50:80")),
+			AwtrixClient.describe(new java.net.UnknownHostException("clock.local")),
+			AwtrixClient.describe(new java.io.IOException("unexpected end of stream on http://192.168.1.50/..."))
+		};
+		for (String problem : problems)
+		{
+			Assert.assertFalse(problem, problem.contains("192.168"));
+			Assert.assertFalse(problem, problem.contains("clock.local"));
+		}
+	}
+
+	@Test
+	public void onlyARiseFromAKnownLevelIsALevelUp()
+	{
+		Assert.assertFalse(UlanziOsrsPlugin.isLevelUp(null, 70));
+		Assert.assertFalse(UlanziOsrsPlugin.isLevelUp(70, 70));
+		Assert.assertTrue(UlanziOsrsPlugin.isLevelUp(69, 70));
+	}
+
+	@Test
+	public void combatSkillsHaveLevelUpIcons()
+	{
+		for (Skill skill : new Skill[] {Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.HITPOINTS,
+			Skill.RANGED, Skill.MAGIC, Skill.PRAYER, Skill.SLAYER, Skill.WOODCUTTING, Skill.SAILING})
+		{
+			Assert.assertNotNull(skill.name(), SkillActivities.levelUpIcon(skill));
+		}
+	}
+
+	@Test
+	public void everyPixelIconFits() throws Exception
+	{
+		for (PixelIcon icon : PixelIcon.values())
+		{
+			assertIconFits(icon.name(), icon.iconData());
+		}
+	}
+
+	private static List<UlanziOsrsPlugin.CompactStat> defaultLine()
+	{
+		List<UlanziOsrsPlugin.CompactStat> line = new ArrayList<>();
+		line.add(new UlanziOsrsPlugin.CompactStat(StatStyle.VALUE, 99, 100, Color.GREEN));
+		line.add(new UlanziOsrsPlugin.CompactStat(StatStyle.VALUE, 70, 70, Color.BLUE));
+		line.add(new UlanziOsrsPlugin.CompactStat(StatStyle.VALUE, 100, 100, Color.YELLOW));
+		return line;
 	}
 
 	private static void assertIconFits(SkillActivity activity, String icon) throws Exception
 	{
+		assertIconFits(activity.name(), icon);
+	}
+
+	private static void assertIconFits(String name, String icon) throws Exception
+	{
 		byte[] gif = Base64.getDecoder().decode(icon);
 		BufferedImage image = ImageIO.read(new ByteArrayInputStream(gif));
-		Assert.assertNotNull(activity.name(), image);
-		Assert.assertEquals(activity.name(), 8, image.getWidth());
-		Assert.assertEquals(activity.name(), 8, image.getHeight());
+		Assert.assertNotNull(name, image);
+		Assert.assertEquals(name, 8, image.getWidth());
+		Assert.assertEquals(name, 8, image.getHeight());
 		for (int i = 0; i < 8; i++)
 		{
-			Assert.assertEquals(activity.name() + " top", 0, image.getRGB(i, 0) & 0xFFFFFF);
-			Assert.assertEquals(activity.name() + " bottom", 0, image.getRGB(i, 7) & 0xFFFFFF);
-			Assert.assertEquals(activity.name() + " left", 0, image.getRGB(0, i) & 0xFFFFFF);
-			Assert.assertEquals(activity.name() + " right", 0, image.getRGB(7, i) & 0xFFFFFF);
+			Assert.assertEquals(name + " top", 0, image.getRGB(i, 0) & 0xFFFFFF);
+			Assert.assertEquals(name + " bottom", 0, image.getRGB(i, 7) & 0xFFFFFF);
+			Assert.assertEquals(name + " left", 0, image.getRGB(0, i) & 0xFFFFFF);
+			Assert.assertEquals(name + " right", 0, image.getRGB(7, i) & 0xFFFFFF);
 		}
 	}
 }

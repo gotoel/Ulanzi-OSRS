@@ -94,6 +94,12 @@ final class SkillActivityIcons
 				return 0x707070;
 			case 'M':
 				return 0x8C84A8;
+			case 'K':
+				return 0x3A3A3A;
+			case 'H':
+				return 0xE8501E;
+			case 'h':
+				return 0x9A2A10;
 			default:
 				throw new IllegalArgumentException("Unknown icon pixel '" + pixel + "'");
 		}

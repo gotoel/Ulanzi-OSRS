@@ -7,8 +7,8 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum AlertDisplayMode
 {
-	FULL_PANEL("Full panel popups"),
-	ON_STATS("On stats / compact view"),
+	FULL_PANEL("Full panel"),
+	ON_STATS("On the stats page"),
 	BOTH("Both");
 
 	private final String name;

@@ -5,12 +5,12 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public enum StatStyle
+public enum SkillProgressMode
 {
 	OFF("Off"),
-	VALUE("Value"),
-	BAR("Bar"),
-	BOTH("Both");
+	LEVEL("Level"),
+	XP_RATE("XP per hour"),
+	BOTH("Level and XP/h");
 
 	private final String name;
 
@@ -23,15 +23,5 @@ public enum StatStyle
 	boolean isShown()
 	{
 		return this != OFF;
-	}
-
-	boolean showsValue()
-	{
-		return this == VALUE || this == BOTH;
-	}
-
-	boolean showsBar()
-	{
-		return this == BAR || this == BOTH;
 	}
 }

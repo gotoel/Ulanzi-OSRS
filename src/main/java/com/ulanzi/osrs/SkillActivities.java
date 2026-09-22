@@ -464,6 +464,63 @@ final class SkillActivities
 		}
 	}
 
+	/**
+	 * The skill an activity trains. Melee gives Attack here; the plugin picks
+	 * Strength or Defence from where the XP actually goes.
+	 */
+	static Skill skillFor(SkillActivity activity)
+	{
+		switch (activity)
+		{
+			case MELEE:
+				return Skill.ATTACK;
+			case RANGED:
+				return Skill.RANGED;
+			case MAGIC:
+				return Skill.MAGIC;
+			case PRAYER:
+				return Skill.PRAYER;
+			default:
+				for (Skill skill : Skill.values())
+				{
+					if (fromSkillXp(skill) == activity)
+					{
+						return skill;
+					}
+				}
+				return null;
+		}
+	}
+
+	/**
+	 * Icon for a level-up in any skill, including the combat skills that have no activity.
+	 */
+	static String levelUpIcon(Skill skill)
+	{
+		switch (skill)
+		{
+			case ATTACK:
+				return SkillActivity.MELEE.iconData();
+			case STRENGTH:
+				return PixelIcon.STRENGTH.iconData();
+			case DEFENCE:
+				return PixelIcon.DEFENCE.iconData();
+			case HITPOINTS:
+				return PixelIcon.HITPOINTS.iconData();
+			case SLAYER:
+				return PixelIcon.SLAYER.iconData();
+			case RANGED:
+				return SkillActivity.RANGED.iconData();
+			case MAGIC:
+				return SkillActivity.MAGIC.iconData();
+			case PRAYER:
+				return SkillActivity.PRAYER.iconData();
+			default:
+				SkillActivity activity = fromSkillXp(skill);
+				return activity == null ? null : activity.iconData();
+		}
+	}
+
 	private static void bind(SkillActivity activity, int... animationIds)
 	{
 		for (int animationId : animationIds)

@@ -2,7 +2,7 @@
 
 RuneLite plugin that drives an [Ulanzi TC001](https://github.com/rroels/ulanzi_tc001_hardware) pixel clock over [AWTRIX NG](https://blueforcer.github.io/awtrix-ng/).
 
-While you play it can show hitpoints, prayer, run energy and special attack on the 32×8 panel. When you go idle it takes over the whole display with a large AFK indicator (custom text, colors, optional rainbow, blink, and a short buzzer tone).
+While you play it can show hitpoints, prayer, run energy and special attack on the 32×8 panel, with an icon for the skill you are training or the combat style you are using. When you go idle it takes over the display with an AFK indicator, low hitpoints and prayer can flash and beep, and level-ups get a short celebration.
 
 Stock Ulanzi firmware cannot push a custom full-screen message. Flash AWTRIX NG once, then point this plugin at the clock's IP.
 
@@ -59,24 +59,47 @@ This plugin does **not** ship or flash firmware. AWTRIX NG is PolyForm Noncommer
 In the plugin config:
 
 1. Set **Clock address** to the IP shown on the panel (e.g. `192.168.1.50`).
-2. Toggle **Test connection** — the clock should flash green `OK`.
+2. Toggle **Test connection**. The clock should flash a green `OK`, and the result is posted in the game chat.
 3. Enable the AFK and stats options you want.
+
+If the clock stops answering while you play, the plugin says so in the game chat, and again when it is back.
 
 ### AFK
 
 - Idle timeout (mouse/keyboard, same idea as Idle Notifier)
-- Custom text, text color, background color
-- Rainbow text, blink, optional buzzer on enter
-- Held notification is re-asserted every few seconds if you dismiss it with the center button
+- **Full panel** takes over the display with your text, colors and an effect: solid, blinking, color waves, plasma, or looking eyes
+- **On the stats page** keeps your stats up and grays them out (or adds an AFK label) instead
+- Optional buzzer when AFK starts
+- The held notification is re-sent every few seconds if you dismiss it with the center button
 
 ### Stats
 
-- **Big**: large font, one value at a time (HP / prayer / energy / spec), rotating
-- **Compact**: small colored fragments on one line plus an HP progress bar
-- Per-stat toggles and low HP / low prayer flash alerts
+- **Big**: one large value at a time with its orb icon (heart, prayer star, boot, crossed swords), rotating
+- **Compact**: every value on one line
+- Each stat is **Off**, **Value**, **Bar**, or **Both**
+- The activity icon shows the skill you are training, or melee, ranged, or magic while fighting. If the compact line no longer fits beside it, the last values switch to bars.
+
+### Skill progress
+
+- Optional. While the activity icon is up, the stats make way for the skill you are training: its **level**, **XP per hour**, or **both** (side by side when they fit, taking turns when they do not)
+- XP per hour is worked out by the plugin by default. Set **XP/h source** to RuneLite XP Tracker to match its panel and globes, including its pause and reset settings
+- The bottom row fills toward the next level with a gradient: the skill's color, red to green, or rainbow
+- Combat keeps hitpoints and prayer up unless **Also in combat** is on; melee follows whichever of Attack, Strength or Defence the XP goes to
+- **XP drops** fly each gain, like `+175 xp`, across the panel beside the skill icon: right to left, left to right, bottom to top, top to bottom, or in place, which briefly swaps out the level and XP/h without moving. Gains that land mid-flight are added to the next one
+
+### Alerts
+
+- Low hitpoints and prayer, as a percent of your max (default) or in points
+- Flash on the stats page or as a full-panel popup, with optional beeps, and again on each further drop
+- When AFK and an alert are active together, pick which wins or rotate between them
+
+### Level ups
+
+- The skill's icon and your new level in rainbow text for a few seconds, with an optional jingle
 
 ## Notes
 
 - Uses AWTRIX NG HTTP API v1 (`PUT /api/v1/apps/pushed/osrs`, `POST /api/v1/notifications`). Not the older AWTRIX 3 paths.
 - Pushed apps live in device RAM and disappear on clock reboot; the plugin re-sends them while you are logged in.
+- While you are logged in the rotation is the stats page and Time. Your own rotation is saved first and put back when you log out or turn the plugin off.
 - HTTP runs off the client thread via OkHttp `enqueue()`.
