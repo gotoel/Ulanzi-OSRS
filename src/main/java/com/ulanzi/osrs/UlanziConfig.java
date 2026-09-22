@@ -292,7 +292,9 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "statsLayout",
 		name = "Layout",
-		description = "Big shows one large stat at a time with its orb icon. Compact shows every stat on one line.",
+		description = "Big shows one large stat at a time with its orb icon, rotating. Compact shows every stat on one line, "
+			+ "named by a row of colored dashes, over a strip of bars. Focus shows whichever stat changed last in large "
+			+ "digits and keeps the rest on the bar strip.",
 		position = 1,
 		section = statsSection
 	)
@@ -350,10 +352,23 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "compactPriority",
+		name = "Keep on screen",
+		description = "Compact layout: when the values no longer fit, the others give up their digits for a bar on the "
+			+ "bottom strip before this one does.",
+		position = 6,
+		section = statsSection
+	)
+	default StatKind compactPriority()
+	{
+		return StatKind.HITPOINTS;
+	}
+
+	@ConfigItem(
 		keyName = "statsRotateSeconds",
 		name = "Rotate every",
 		description = "Big layout: how long each stat stays on screen before rotating.",
-		position = 6,
+		position = 7,
 		section = statsSection
 	)
 	@Range(min = 1, max = 30)
@@ -366,8 +381,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "showActivity",
 		name = "Activity icon",
-		description = "Show an icon while skilling, and a melee, ranged, or magic icon while you are attacking with that style. If the compact line no longer fits beside it, the last values switch to bars.",
-		position = 7,
+		description = "Show an icon while skilling, and a melee, ranged, or magic icon while you are attacking with that style. If the compact line no longer fits beside it, values switch to bars on the bottom strip.",
+		position = 8,
 		section = statsSection
 	)
 	default boolean showActivity()
@@ -379,7 +394,7 @@ public interface UlanziConfig extends Config
 		keyName = "activityHoldSeconds",
 		name = "Activity hold",
 		description = "Seconds to keep the icon after the action stops. 0 clears it on the next tick. Increase it if walking between trees or rocks makes the icon flicker.",
-		position = 8,
+		position = 9,
 		section = statsSection
 	)
 	@Range(min = 0, max = 30)

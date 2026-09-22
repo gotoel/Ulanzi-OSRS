@@ -8,7 +8,8 @@ import lombok.Getter;
 public enum StatsLayout
 {
 	BIG("Big"),
-	COMPACT("Compact");
+	COMPACT("Compact"),
+	FOCUS("Focus");
 
 	private final String name;
 

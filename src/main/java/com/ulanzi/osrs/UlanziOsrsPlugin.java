@@ -51,14 +51,14 @@ public class UlanziOsrsPlugin extends Plugin
 {
 	private static final long AFK_REASSERT_MS = 5_000L;
 	private static final long AFK_EYES_REASSERT_MS = 700L;
-	private static final Color PRAYER_COLOR = new Color(0x4F_A3_FF);
-	private static final Color ENERGY_COLOR = new Color(0xFF_D4_00);
-	private static final Color SPEC_COLOR = new Color(0xFF_8C_00);
 	private static final Color HP_FLASH_OFF = new Color(40, 0, 0);
 	private static final Color PRAYER_FLASH_OFF = new Color(0, 20, 40);
+	/** How long a reading that has just dropped is left showing behind the new one. */
+	private static final long GHOST_MS = 1_200L;
+	/** How long the focus page holds a stat before a smaller change can take it. */
+	private static final long FOCUS_HOLD_MS = 2_500L;
 	private static final int PANEL_WIDTH = 32;
 	private static final int ICON_WIDTH = 8;
-	private static final int BAR_WIDTH = 2;
 	private static final int CHAR_WIDTH = 4;
 	private static final int SPACE_WIDTH = 2;
 	private static final Skill[] MELEE_SKILLS = {Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE};
@@ -111,6 +111,12 @@ public class UlanziOsrsPlugin extends Plugin
 	private boolean wasLowHp;
 	private boolean wasLowPray;
 	private int bigStatIndex;
+	private final EnumMap<StatKind, Integer> statPercent = new EnumMap<>(StatKind.class);
+	private final EnumMap<StatKind, Integer> ghostPercent = new EnumMap<>(StatKind.class);
+	private final EnumMap<StatKind, Long> ghostUntilMs = new EnumMap<>(StatKind.class);
+	private StatKind focusStat;
+	private long focusUntilMs;
+	private int focusChange;
 	private long nextRotateMs;
 	private long nextOverlayRotateMs;
 	private int overlayRotateIndex;
@@ -820,6 +826,14 @@ public class UlanziOsrsPlugin extends Plugin
 	private void pushStats(int hitpoints, int hitpointsMax, int prayer, int prayerMax, int energy, int spec,
 		boolean lowHp, boolean lowPray, OverlayKind focus, SkillActivity activity)
 	{
+		int hpPercent = AwtrixClient.percentOf(hitpoints, hitpointsMax);
+		int prayerPercent = AwtrixClient.percentOf(prayer, prayerMax);
+		long now = System.currentTimeMillis();
+		trackChange(StatKind.HITPOINTS, hpPercent, now);
+		trackChange(StatKind.PRAYER, prayerPercent, now);
+		trackChange(StatKind.ENERGY, energy, now);
+		trackChange(StatKind.SPEC, spec, now);
+
 		if (focus == null && activity != null && showsSkillProgress())
 		{
 			pushSkillProgress(activity);
@@ -844,34 +858,31 @@ public class UlanziOsrsPlugin extends Plugin
 		boolean flashPray = lowPray && config.lowPrayerFlash();
 		compactFlashOn = (flashHp || flashPray) && !compactFlashOn;
 
-		Color hpColor = AwtrixClient.hpColor(hitpoints, hitpointsMax);
+		// Every stat answers its own value now, not just hitpoints, so a glance says
+		// something is running out before any of the digits have been read.
+		Color hpColor = StatRamp.drain(StatKind.HITPOINTS.getIdentity(), hpPercent);
 		if (flashHp)
 		{
 			hpColor = compactFlashOn ? Color.RED : HP_FLASH_OFF;
 		}
-		Color prayColor = PRAYER_COLOR;
+		Color prayColor = StatRamp.drain(StatKind.PRAYER.getIdentity(), prayerPercent);
 		if (flashPray)
 		{
-			prayColor = compactFlashOn ? PRAYER_COLOR : PRAYER_FLASH_OFF;
+			prayColor = compactFlashOn ? StatKind.PRAYER.getIdentity() : PRAYER_FLASH_OFF;
 		}
+		Color energyColor = StatRamp.drain(StatKind.ENERGY.getIdentity(), energy);
+		Color specColor = StatRamp.drain(StatKind.SPEC.getIdentity(), spec);
 
-		int hpPercent = hitpointsMax <= 0 ? 0 : Math.min(100, Math.max(0, (hitpoints * 100) / hitpointsMax));
-		int prayerPercent = prayerMax <= 0 ? 0 : Math.min(100, Math.max(0, (prayer * 100) / prayerMax));
 		AfkTintMode tintMode = focus == OverlayKind.AFK ? config.afkTintMode() : AfkTintMode.OFF;
 		Color tint = tintMode != AfkTintMode.OFF ? config.afkTintColor() : null;
 		Color afkBackground = tintMode.tintsBackground() ? tint : null;
-		Color energyColor = ENERGY_COLOR;
-		Color specColor = SPEC_COLOR;
-		Color barColor = flashHp ? Color.RED : AwtrixClient.hpColor(hitpoints, hitpointsMax);
-		Color spaceColor = Color.DARK_GRAY;
-		if (tintMode.tintsValues() && tint != null)
+		boolean tinted = tintMode.tintsValues() && tint != null;
+		if (tinted)
 		{
 			hpColor = tint;
 			prayColor = tint;
 			energyColor = tint;
 			specColor = tint;
-			barColor = tint;
-			spaceColor = tint;
 		}
 
 		if (focus == OverlayKind.LOW_HP && config.statsLayout() == StatsLayout.BIG)
@@ -890,64 +901,56 @@ public class UlanziOsrsPlugin extends Plugin
 			return;
 		}
 
+		Color valueTint = tinted ? tint : null;
+
+		if (config.statsLayout() == StatsLayout.FOCUS && focus == null)
+		{
+			pushFocusStats(hitpoints, hitpointsMax, hpPercent, prayer, prayerMax, prayerPercent, energy, spec,
+				hpColor, prayColor, energyColor, specColor, valueTint, afkBackground, activityIcon, now);
+			return;
+		}
+
 		if (config.statsLayout() == StatsLayout.COMPACT || focus != null)
 		{
-			String label = null;
-			Color labelColor = null;
+			boolean icon = activityIcon != null;
+			boolean routine = focus == null || focus == OverlayKind.AFK;
+			StatStyle hpStyle = focus == OverlayKind.LOW_HP
+				? atLeastValue(config.hitpointsStyle()) : config.hitpointsStyle();
+			StatStyle prayerStyle = focus == OverlayKind.LOW_PRAYER
+				? atLeastValue(config.prayerStyle()) : config.prayerStyle();
+
+			List<CompactLayout.Cell> cells = new ArrayList<>();
 			if (focus == OverlayKind.AFK && config.afkCompactLabel())
 			{
-				label = AwtrixClient.truncate(config.afkText(), 4);
-				labelColor = tintMode.tintsValues() && tint != null
+				Color labelColor = tinted
 					? tint
 					: (!compactFlashOn ? config.afkTextColor() : Color.DARK_GRAY);
+				cells.add(CompactLayout.Cell.label(AwtrixClient.truncate(config.afkText(), 4), labelColor));
 			}
 
-			boolean routine = focus == null || focus == OverlayKind.AFK;
-			StatStyle hpStyle = focus == OverlayKind.LOW_HP ? atLeastValue(config.hitpointsStyle()) : config.hitpointsStyle();
-			StatStyle prayerStyle = focus == OverlayKind.LOW_PRAYER ? atLeastValue(config.prayerStyle()) : config.prayerStyle();
-			List<CompactStat> line = new ArrayList<>();
-			addCompactStat(line, hpStyle, hitpoints, hpPercent, flashHp ? hpColor : barColor);
-			addCompactStat(line, prayerStyle, prayer, prayerPercent, prayColor);
+			addCell(cells, StatKind.HITPOINTS, hpStyle, hitpoints, hpPercent, hitpointsMax, hpColor, valueTint, now);
+			addCell(cells, StatKind.PRAYER, prayerStyle, prayer, prayerPercent, prayerMax, prayColor, valueTint, now);
 			if (routine)
 			{
-				addCompactStat(line, config.energyStyle(), energy, energy, energyColor);
-				addCompactStat(line, config.specStyle(), spec, spec, specColor);
-			}
-			fitCompactLine(line, label, activityIcon != null);
-
-			List<AwtrixClient.TextFragment> fragments = new ArrayList<>();
-			List<AwtrixClient.ColumnBar> bars = new ArrayList<>();
-			if (label != null)
-			{
-				fragments.add(new AwtrixClient.TextFragment(label, labelColor));
-			}
-			for (CompactStat stat : line)
-			{
-				if (stat.style.showsBar())
-				{
-					bars.add(new AwtrixClient.ColumnBar(stat.percent, stat.color));
-				}
-				if (stat.style.showsValue())
-				{
-					if (!fragments.isEmpty())
-					{
-						fragments.add(new AwtrixClient.TextFragment(" ", spaceColor));
-					}
-					fragments.add(new AwtrixClient.TextFragment(String.valueOf(stat.value), stat.color));
-				}
+				addCell(cells, StatKind.ENERGY, config.energyStyle(), energy, energy, 100, energyColor, valueTint, now);
+				addCell(cells, StatKind.SPEC, config.specStyle(), spec, spec, 100, specColor, valueTint, now);
 			}
 
-			if (fragments.isEmpty() && activity != null && bars.isEmpty())
+			CompactLayout.fit(cells, icon, config.compactPriority());
+			CompactLayout.place(cells, icon);
+
+			if (!hasAnything(cells))
 			{
-				fragments.add(new AwtrixClient.TextFragment(activity.label(), activity.color()));
-			}
-			if (fragments.isEmpty() && bars.isEmpty())
-			{
-				awtrixClient.clearStats();
+				if (activity == null)
+				{
+					awtrixClient.clearStats();
+					return;
+				}
+				pushActivityLabel(activity, afkBackground);
 				return;
 			}
 
-			awtrixClient.pushCompactStats(fragments, bars, afkBackground, activityIcon);
+			awtrixClient.pushCompact(cells, afkBackground, activityIcon);
 			return;
 		}
 
@@ -970,7 +973,6 @@ public class UlanziOsrsPlugin extends Plugin
 			return;
 		}
 
-		long now = System.currentTimeMillis();
 		if (nextRotateMs == 0L)
 		{
 			nextRotateMs = now + (config.statsRotateSeconds() * 1000L);
@@ -998,12 +1000,21 @@ public class UlanziOsrsPlugin extends Plugin
 		}
 	}
 
-	private static void addCompactStat(List<CompactStat> line, StatStyle style, int value, int percent, Color color)
+	/**
+	 * One stat's cell. The slot is sized by the largest number the stat can reach rather
+	 * than the one it happens to be showing, which is what keeps the rest of the line
+	 * still when this value gains or loses a digit.
+	 */
+	private void addCell(List<CompactLayout.Cell> cells, StatKind kind, StatStyle style, int value, int percent,
+		int ceiling, Color color, Color tint, long now)
 	{
-		if (style.isShown())
+		if (!style.isShown())
 		{
-			line.add(new CompactStat(style, value, percent, color));
+			return;
 		}
+		cells.add(new CompactLayout.Cell(kind, style, String.valueOf(value),
+			kind.digitsFor(Math.max(ceiling, value)), percent, ghostFor(kind, now),
+			color, tint != null ? tint : kind.getIdentity()));
 	}
 
 	private static StatStyle atLeastValue(StatStyle style)
@@ -1011,45 +1022,155 @@ public class UlanziOsrsPlugin extends Plugin
 		return style.isShown() ? style : StatStyle.VALUE;
 	}
 
+	private static boolean hasAnything(List<CompactLayout.Cell> cells)
+	{
+		for (CompactLayout.Cell cell : cells)
+		{
+			if (cell.showsValue() || cell.showsBar())
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/**
-	 * AWTRIX's small font is 4px per character and 2px per space. An icon takes the left 8px
-	 * and each bar 2px on the right. Values that no longer fit turn into bars, last one first.
+	 * Remembers where a stat was so the bottom strip can leave the lost part showing for a
+	 * moment. A run of hits keeps the highest reading of the run, so the trail measures the
+	 * whole drop rather than only the last tick of it.
 	 */
-	static void fitCompactLine(List<CompactStat> line, String label, boolean icon)
+	private void trackChange(StatKind kind, int percent, long now)
 	{
-		for (int i = line.size() - 1; i >= 0 && !compactLineFits(line, label, icon); i--)
+		Integer before = statPercent.put(kind, percent);
+		if (before == null || before == percent)
 		{
-			CompactStat stat = line.get(i);
-			if (stat.style.showsValue())
-			{
-				stat.style = StatStyle.BAR;
-			}
+			return;
+		}
+		claimFocus(kind, Math.abs(percent - before), now);
+		if (percent > before)
+		{
+			ghostPercent.remove(kind);
+			ghostUntilMs.remove(kind);
+			return;
+		}
+		Long until = ghostUntilMs.get(kind);
+		Integer ghost = ghostPercent.get(kind);
+		boolean running = until != null && ghost != null && now < until;
+		ghostPercent.put(kind, running ? Math.max(ghost, before) : before);
+		ghostUntilMs.put(kind, now + GHOST_MS);
+	}
+
+	/**
+	 * Which stat the focus page shows. Run energy ticks over by a point at a time the whole
+	 * while you are moving, so the last thing to change is the wrong question: a stat holds
+	 * the panel for a moment once it has it, and only a bigger move takes it early.
+	 */
+	private void claimFocus(StatKind kind, int change, long now)
+	{
+		if (focusStat != null && kind != focusStat && now < focusUntilMs && change <= focusChange)
+		{
+			return;
+		}
+		focusStat = kind;
+		focusChange = change;
+		focusUntilMs = now + FOCUS_HOLD_MS;
+	}
+
+	private int ghostFor(StatKind kind, long now)
+	{
+		Long until = ghostUntilMs.get(kind);
+		Integer ghost = ghostPercent.get(kind);
+		if (until == null || ghost == null || now >= until)
+		{
+			return -1;
+		}
+		return ghost;
+	}
+
+	/**
+	 * The focus page: whichever stat moved last in large digits, with every stat that is
+	 * switched on keeping its share of the bottom strip. Nothing rotates on a timer here,
+	 * so the panel is answering the game rather than a clock.
+	 */
+	private void pushFocusStats(int hitpoints, int hitpointsMax, int hpPercent, int prayer, int prayerMax,
+		int prayerPercent, int energy, int spec, Color hpColor, Color prayColor, Color energyColor, Color specColor,
+		Color tint, Color background, String activityIcon, long now)
+	{
+		List<CompactLayout.Cell> cells = new ArrayList<>();
+		addCell(cells, StatKind.HITPOINTS, barOnly(config.hitpointsStyle()), hitpoints, hpPercent, hitpointsMax,
+			hpColor, tint, now);
+		addCell(cells, StatKind.PRAYER, barOnly(config.prayerStyle()), prayer, prayerPercent, prayerMax,
+			prayColor, tint, now);
+		addCell(cells, StatKind.ENERGY, barOnly(config.energyStyle()), energy, energy, 100, energyColor, tint, now);
+		addCell(cells, StatKind.SPEC, barOnly(config.specStyle()), spec, spec, 100, specColor, tint, now);
+
+		if (cells.isEmpty())
+		{
+			awtrixClient.clearStats();
+			return;
+		}
+
+		StatKind shown = focusStat;
+		if (shown == null || !isShown(shown))
+		{
+			shown = cells.get(0).kind;
+		}
+		CompactLayout.place(cells, activityIcon != null);
+
+		String value;
+		Color color;
+		switch (shown)
+		{
+			case PRAYER:
+				value = String.valueOf(prayer);
+				color = prayColor;
+				break;
+			case ENERGY:
+				value = String.valueOf(energy);
+				color = energyColor;
+				break;
+			case SPEC:
+				value = String.valueOf(spec);
+				color = specColor;
+				break;
+			case HITPOINTS:
+			default:
+				value = String.valueOf(hitpoints);
+				color = hpColor;
+				break;
+		}
+		awtrixClient.pushFocusStat(value, color, cells, background, activityIcon);
+	}
+
+	/**
+	 * On the focus page every stat that is on gets a bar, since the one large value is the
+	 * only thing with room for digits.
+	 */
+	private static StatStyle barOnly(StatStyle style)
+	{
+		return style.isShown() ? StatStyle.BAR : StatStyle.OFF;
+	}
+
+	private boolean isShown(StatKind kind)
+	{
+		switch (kind)
+		{
+			case PRAYER:
+				return config.prayerStyle().isShown();
+			case ENERGY:
+				return config.energyStyle().isShown();
+			case SPEC:
+				return config.specStyle().isShown();
+			case HITPOINTS:
+			default:
+				return config.hitpointsStyle().isShown();
 		}
 	}
 
-	static boolean compactLineFits(List<CompactStat> line, String label, boolean icon)
-	{
-		List<String> words = new ArrayList<>();
-		if (label != null)
-		{
-			words.add(label);
-		}
-		int bars = 0;
-		for (CompactStat stat : line)
-		{
-			if (stat.style.showsBar())
-			{
-				bars++;
-			}
-			if (stat.style.showsValue())
-			{
-				words.add(String.valueOf(stat.value));
-			}
-		}
-		int available = PANEL_WIDTH - (icon ? ICON_WIDTH : 0) - bars * BAR_WIDTH;
-		return compactTextWidth(words) <= available;
-	}
-
+	/**
+	 * AWTRIX's small font is 4px per character and 2px per space, which is what the skill
+	 * progress page still measures its two words against.
+	 */
 	static int compactTextWidth(List<String> words)
 	{
 		if (words.isEmpty())
@@ -1180,9 +1301,10 @@ public class UlanziOsrsPlugin extends Plugin
 
 	private void pushActivityLabel(SkillActivity activity, Color background)
 	{
-		List<AwtrixClient.TextFragment> label = new ArrayList<>();
-		label.add(new AwtrixClient.TextFragment(activity.label(), activity.color()));
-		awtrixClient.pushCompactStats(label, -1, activity.color(), background, activity.iconData());
+		List<CompactLayout.Cell> cells = new ArrayList<>();
+		cells.add(CompactLayout.Cell.label(activity.label(), activity.color()));
+		CompactLayout.place(cells, true);
+		awtrixClient.pushCompact(cells, background, activity.iconData());
 	}
 
 	private SkillActivity currentActivity()
@@ -1390,6 +1512,12 @@ public class UlanziOsrsPlugin extends Plugin
 		wasLowHp = false;
 		wasLowPray = false;
 		bigStatIndex = 0;
+		statPercent.clear();
+		ghostPercent.clear();
+		ghostUntilMs.clear();
+		focusStat = null;
+		focusUntilMs = 0L;
+		focusChange = 0;
 		nextRotateMs = 0L;
 		nextOverlayRotateMs = 0L;
 		overlayRotateIndex = 0;
@@ -1428,22 +1556,6 @@ public class UlanziOsrsPlugin extends Plugin
 			this.color = color;
 			this.progress = progress;
 			this.icon = icon;
-		}
-	}
-
-	static final class CompactStat
-	{
-		StatStyle style;
-		final int value;
-		final int percent;
-		final Color color;
-
-		CompactStat(StatStyle style, int value, int percent, Color color)
-		{
-			this.style = style;
-			this.value = value;
-			this.percent = percent;
-			this.color = color;
 		}
 	}
 }

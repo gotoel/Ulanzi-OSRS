@@ -81,6 +81,12 @@ public class AwtrixClient
 	private static final double MIN_PULSE = 0.2;
 	private static final double MAX_PULSE = 3.0;
 	private static final int PULSE_ICON_CACHE = 64;
+	/** How far down a reading that has just been lost is left showing. */
+	private static final double GHOST_LEVEL = 0.35;
+	/** A part-filled pixel never falls below this, so a trickle still shows. */
+	private static final int MIN_PARTIAL = 12;
+	/** The dashes naming the values are a label, so they sit under them rather than beside. */
+	private static final double TICK_LEVEL = 0.45;
 
 	@Inject
 	AwtrixClient(OkHttpClient httpClient, UlanziConfig config, Gson gson)
@@ -696,83 +702,161 @@ public class AwtrixClient
 		putStats(body);
 	}
 
-	void pushCompactStats(List<TextFragment> fragments, int hpPercent, Color hpColor)
-	{
-		pushCompactStats(fragments, hpPercent, hpColor, null, null);
-	}
-
-	void pushCompactStats(List<TextFragment> fragments, int hpPercent, Color hpColor, Color background)
-	{
-		pushCompactStats(fragments, hpPercent, hpColor, background, null);
-	}
-
-	void pushCompactStats(List<TextFragment> fragments, int hpPercent, Color hpColor, Color background,
-		String activityIcon)
-	{
-		pushCompactStats(fragments, hpPercent, hpColor, background, activityIcon, -1, null, -1, null);
-	}
-
-	void pushCompactStats(List<TextFragment> fragments, int hpPercent, Color hpColor, Color background,
-		String activityIcon, int energyPercent, Color energyColor)
-	{
-		pushCompactStats(fragments, hpPercent, hpColor, background, activityIcon, -1, null, energyPercent, energyColor);
-	}
-
-	void pushCompactStats(List<TextFragment> fragments, int hpPercent, Color hpColor, Color background,
-		String activityIcon, int prayerPercent, Color prayerColor, int energyPercent, Color energyColor)
-	{
-		List<ColumnBar> bars = new ArrayList<>();
-		if (prayerPercent >= 0)
-		{
-			bars.add(new ColumnBar(prayerPercent, prayerColor));
-		}
-		if (energyPercent >= 0)
-		{
-			bars.add(new ColumnBar(energyPercent, energyColor));
-		}
-		boolean hpBar = hpPercent >= 0;
-		pushCompactStats(fragments, bars, hpBar ? hpPercent : -1, hpColor, background, activityIcon);
-	}
-
-	void pushCompactStats(List<TextFragment> fragments, List<ColumnBar> bars, Color background, String activityIcon)
-	{
-		pushCompactStats(fragments, bars, -1, null, background, activityIcon);
-	}
-
-	void pushCompactStats(List<TextFragment> fragments, List<ColumnBar> bars, int hpPercent, Color hpColor,
-		Color background, String activityIcon)
+	/**
+	 * The compact page, drawn pixel by pixel rather than handed over as one centred run of
+	 * text. Centred text reflows every time a number gains or loses a digit, which on 32
+	 * pixels is the most visible thing about the old page; drawing each value at a settled
+	 * x is what stops it. Nothing here uses the app's own text, so the firmware never gets
+	 * to lay anything out.
+	 */
+	void pushCompact(List<CompactLayout.Cell> cells, Color background, String activityIcon)
 	{
 		JsonObject body = baseStatsApp();
 		body.addProperty("font", "small");
-		body.addProperty("textCenter", true);
+		body.addProperty("text", "");
 		body.add("scroll", scrollStatic());
 		applyActivityIcon(body, activityIcon);
-		int barCount = bars == null ? 0 : bars.size();
-		if (barCount > 0)
-		{
-			// Center in the space left of the 2px columns: that center sits one pixel left per column.
-			body.addProperty("textOffsetX", -barCount);
-			body.add("draw", verticalColumns(bars));
-		}
 		if (background != null)
 		{
 			body.addProperty("backgroundColor", hex(background));
 		}
-
-		body.add("text", fragmentsJson(fragments));
-
-		if (hpPercent >= 0)
-		{
-			body.addProperty("progress", hpPercent);
-			body.addProperty("progressColor", hex(hpColor));
-			body.addProperty("progressTrackColor", "#202020");
-		}
-		if (hpPercent >= 0 || barCount > 0)
-		{
-			body.addProperty("textInFront", true);
-		}
-
+		body.add("draw", compactDraw(cells));
 		putStats(body);
+	}
+
+	/**
+	 * The focus page: one stat large in the middle, the rest of them along the bottom row.
+	 * The big value is left to the firmware to centre rather than drawn, since the large
+	 * font's widths are not ours to know, and one value has nothing to line up with anyway.
+	 */
+	void pushFocusStat(String value, Color color, List<CompactLayout.Cell> cells, Color background,
+		String activityIcon)
+	{
+		JsonObject body = baseStatsApp();
+		body.addProperty("font", "large");
+		body.addProperty("text", value);
+		body.addProperty("textColor", hex(color));
+		body.addProperty("textCenter", true);
+		body.addProperty("textInFront", true);
+		body.add("scroll", scrollStatic());
+		applyActivityIcon(body, activityIcon);
+		if (background != null)
+		{
+			body.addProperty("backgroundColor", hex(background));
+		}
+		body.add("draw", stripDraw(cells));
+		putStats(body);
+	}
+
+	/**
+	 * Dashes first, then values, then the strip, so a value drawn tight against its slot
+	 * edge lands on top of its own dash rather than under the next one.
+	 */
+	JsonArray compactDraw(List<CompactLayout.Cell> cells)
+	{
+		JsonArray draw = new JsonArray();
+		for (CompactLayout.Cell cell : cells)
+		{
+			if (cell.showsValue() && cell.identity != null && cell.x >= 0)
+			{
+				draw.add(drawCmd("rectFill", cell.x, CompactLayout.TICK_ROW,
+					CompactLayout.tickWidth(cell), 1, hex(brighten(cell.identity, TICK_LEVEL))));
+			}
+		}
+		for (CompactLayout.Cell cell : cells)
+		{
+			if (cell.showsValue() && cell.x >= 0)
+			{
+				draw.add(drawCmd("text", CompactLayout.textX(cell), CompactLayout.TEXT_BASELINE,
+					cell.text, hex(cell.color)));
+			}
+		}
+		appendStrip(draw, cells);
+		return draw;
+	}
+
+	private JsonArray stripDraw(List<CompactLayout.Cell> cells)
+	{
+		JsonArray draw = new JsonArray();
+		appendStrip(draw, cells);
+		return draw;
+	}
+
+	private void appendStrip(JsonArray draw, List<CompactLayout.Cell> cells)
+	{
+		for (CompactLayout.Cell cell : cells)
+		{
+			if (cell.showsBar() && cell.stripX >= 0)
+			{
+				appendStripSegment(draw, cell);
+			}
+		}
+	}
+
+	/**
+	 * One stat's share of the bottom row. The pixel the fill stops on is lit in proportion
+	 * to how far into it the value reaches, so the bar answers a change of a percent or two
+	 * instead of sitting still until it has earned a whole pixel.
+	 */
+	private void appendStripSegment(JsonArray draw, CompactLayout.Cell cell)
+	{
+		int row = CompactLayout.STRIP_ROW;
+		int width = cell.stripWidth;
+		Color color = cell.color == null ? Color.WHITE : cell.color;
+		draw.add(drawCmd("rectFill", cell.stripX, row, width, 1, "#202020"));
+
+		// What the stat was a moment ago, left behind so a drop is visible as it happens.
+		if (cell.ghostPercent > cell.percent)
+		{
+			int ghost = barFullPixels(cell.ghostPercent, width);
+			int from = barFullPixels(cell.percent, width);
+			if (ghost > from)
+			{
+				draw.add(drawCmd("rectFill", cell.stripX + from, row, ghost - from, 1,
+					hex(brighten(color, GHOST_LEVEL))));
+			}
+		}
+
+		int full = barFullPixels(cell.percent, width);
+		if (full > 0)
+		{
+			draw.add(drawCmd("rectFill", cell.stripX, row, full, 1, hex(color)));
+		}
+		int partial = barPartialPercent(cell.percent, width);
+		if (partial > 0 && full < width)
+		{
+			draw.add(drawCmd("pixel", cell.stripX + full, row, hex(brighten(color, partial / 100.0))));
+		}
+	}
+
+	/**
+	 * Whole pixels a 0-100 percent fills across a bar of this width.
+	 */
+	static int barFullPixels(int percent, int width)
+	{
+		if (percent <= 0 || width <= 0)
+		{
+			return 0;
+		}
+		return Math.min(width, Math.min(100, percent) * width / 100);
+	}
+
+	/**
+	 * How far into the next pixel the value reaches, 0-99, which is the brightness that
+	 * pixel is lit at. Anything above zero keeps at least a trace of a pixel showing.
+	 */
+	static int barPartialPercent(int percent, int width)
+	{
+		if (percent <= 0 || width <= 0)
+		{
+			return 0;
+		}
+		int remainder = (Math.min(100, percent) * width) % 100;
+		if (remainder == 0)
+		{
+			return 0;
+		}
+		return Math.max(MIN_PARTIAL, remainder);
 	}
 
 	/**
@@ -995,52 +1079,6 @@ public class AwtrixClient
 		enqueue("PUT", "/api/v1/apps/active", body.toString(), null);
 	}
 
-	/**
-	 * How many rows of an 8px column to fill for a 0–100 energy percent.
-	 * Any non-zero value shows at least one pixel.
-	 */
-	static int energyColumnRows(int percent)
-	{
-		if (percent <= 0)
-		{
-			return 0;
-		}
-		int filled = (Math.min(100, percent) * 8 + 4) / 100;
-		if (filled <= 0)
-		{
-			return 1;
-		}
-		return Math.min(8, filled);
-	}
-
-	/**
-	 * Bars are drawn from the right edge, last in the list at the edge.
-	 * Pass them in left-to-right reading order (hitpoints, prayer, energy, spec).
-	 */
-	private JsonArray verticalColumns(List<ColumnBar> bars)
-	{
-		JsonArray draw = new JsonArray();
-		int x = 30;
-		for (int i = bars.size() - 1; i >= 0; i--)
-		{
-			ColumnBar bar = bars.get(i);
-			Color color = bar.color == null ? Color.WHITE : bar.color;
-			appendVerticalBar(draw, x, bar.percent, color);
-			x -= 2;
-		}
-		return draw;
-	}
-
-	private void appendVerticalBar(JsonArray draw, int x, int percent, Color color)
-	{
-		int filled = energyColumnRows(percent);
-		draw.add(drawCmd("rectFill", x, 0, 2, 8, "#202020"));
-		if (filled > 0)
-		{
-			draw.add(drawCmd("rectFill", x, 8 - filled, 2, filled, hex(color)));
-		}
-	}
-
 	private void applyActivityIcon(JsonObject body, String activityIcon)
 	{
 		if (activityIcon == null || activityIcon.isEmpty())
@@ -1221,22 +1259,13 @@ public class AwtrixClient
 		return trimmed.substring(0, maxChars);
 	}
 
-	static Color hpColor(int current, int max)
+	static int percentOf(int current, int max)
 	{
 		if (max <= 0)
 		{
-			return Color.GREEN;
+			return 0;
 		}
-		double ratio = (double) current / (double) max;
-		if (ratio > 0.5)
-		{
-			return Color.GREEN;
-		}
-		if (ratio > 0.25)
-		{
-			return Color.YELLOW;
-		}
-		return Color.RED;
+		return Math.max(0, Math.min(100, (int) ((current * 100L) / max)));
 	}
 
 	@Value
@@ -1244,18 +1273,6 @@ public class AwtrixClient
 	{
 		String text;
 		Color color;
-	}
-
-	static final class ColumnBar
-	{
-		final int percent;
-		final Color color;
-
-		ColumnBar(int percent, Color color)
-		{
-			this.percent = percent;
-			this.color = color;
-		}
 	}
 
 	static final class AppLoop

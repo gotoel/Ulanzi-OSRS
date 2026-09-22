@@ -52,15 +52,6 @@ public class SkillActivityTrackerTest
 	}
 
 	@Test
-	public void energyColumnFillsFromTheBottom()
-	{
-		Assert.assertEquals(0, AwtrixClient.energyColumnRows(0));
-		Assert.assertEquals(1, AwtrixClient.energyColumnRows(1));
-		Assert.assertEquals(4, AwtrixClient.energyColumnRows(50));
-		Assert.assertEquals(8, AwtrixClient.energyColumnRows(100));
-	}
-
-	@Test
 	public void choppingAnimationShowsWoodcuttingImmediately()
 	{
 		SkillActivityTracker tracker = new SkillActivityTracker();
@@ -195,43 +186,6 @@ public class SkillActivityTrackerTest
 	}
 
 	@Test
-	public void defaultCompactLineFitsTheBarePanel()
-	{
-		Assert.assertEquals(31, UlanziOsrsPlugin.compactTextWidth(Arrays.asList("99", "70", "100")));
-		List<UlanziOsrsPlugin.CompactStat> line = defaultLine();
-		UlanziOsrsPlugin.fitCompactLine(line, null, false);
-		Assert.assertEquals(StatStyle.VALUE, line.get(2).style);
-	}
-
-	@Test
-	public void compactLineBesideAnIconTurnsTheLastValueIntoABar()
-	{
-		List<UlanziOsrsPlugin.CompactStat> line = defaultLine();
-		UlanziOsrsPlugin.fitCompactLine(line, null, true);
-		Assert.assertEquals(StatStyle.VALUE, line.get(0).style);
-		Assert.assertEquals(StatStyle.VALUE, line.get(1).style);
-		Assert.assertEquals(StatStyle.BAR, line.get(2).style);
-		Assert.assertTrue(UlanziOsrsPlugin.compactLineFits(line, null, true));
-	}
-
-	@Test
-	public void afkLabelBesideAnIconStillFits()
-	{
-		List<UlanziOsrsPlugin.CompactStat> line = defaultLine();
-		UlanziOsrsPlugin.fitCompactLine(line, "AFK", true);
-		Assert.assertEquals(StatStyle.BAR, line.get(0).style);
-		Assert.assertEquals(StatStyle.BAR, line.get(1).style);
-		Assert.assertEquals(StatStyle.BAR, line.get(2).style);
-		Assert.assertTrue(UlanziOsrsPlugin.compactLineFits(line, "AFK", true));
-
-		List<UlanziOsrsPlugin.CompactStat> noIcon = defaultLine();
-		UlanziOsrsPlugin.fitCompactLine(noIcon, "AFK", false);
-		Assert.assertEquals(StatStyle.VALUE, noIcon.get(0).style);
-		Assert.assertEquals(StatStyle.BAR, noIcon.get(1).style);
-		Assert.assertEquals(StatStyle.BAR, noIcon.get(2).style);
-	}
-
-	@Test
 	public void appLoopKeepsTheUsersOrderAndSwitchedOffApps()
 	{
 		String json = "["
@@ -288,15 +242,6 @@ public class SkillActivityTrackerTest
 		{
 			assertIconFits(icon.name(), icon.iconData());
 		}
-	}
-
-	private static List<UlanziOsrsPlugin.CompactStat> defaultLine()
-	{
-		List<UlanziOsrsPlugin.CompactStat> line = new ArrayList<>();
-		line.add(new UlanziOsrsPlugin.CompactStat(StatStyle.VALUE, 99, 100, Color.GREEN));
-		line.add(new UlanziOsrsPlugin.CompactStat(StatStyle.VALUE, 70, 70, Color.BLUE));
-		line.add(new UlanziOsrsPlugin.CompactStat(StatStyle.VALUE, 100, 100, Color.YELLOW));
-		return line;
 	}
 
 	private static void assertIconFits(SkillActivity activity, String icon) throws Exception

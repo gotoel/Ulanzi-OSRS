@@ -75,9 +75,13 @@ If the clock stops answering while you play, the plugin says so in the game chat
 ### Stats
 
 - **Big**: one large value at a time with its orb icon (heart, prayer star, boot, crossed swords), rotating
-- **Compact**: every value on one line
+- **Compact**: every value on one line, read in three tiers. A row of dashes along the top names each value in the colour that stat is always known by; the values sit in the middle; the bottom row is a strip of bars sharing the full width. Each value keeps a slot sized for the largest number that stat can reach and is right aligned in it, so a number changing from 100 to 99 changes in place instead of sliding the rest of the line sideways
+- **Focus**: whichever stat moved last, large, with every stat you have switched on keeping its bar on the bottom strip. It holds a stat for a couple of seconds once it has the panel, and only a bigger move takes it early, so run energy ticking over while you walk does not keep the panel to itself
 - Each stat is **Off**, **Value**, **Bar**, or **Both**
-- The activity icon shows the skill you are training, or melee, ranged, or magic while fighting. If the compact line no longer fits beside it, the last values switch to bars.
+- Every stat now answers its own value: full it keeps its own colour, and it ramps through amber to red as it drains, so a glance says something is running out before any of the digits have been read. Hitpoints used to be the only one that did this, and only in three steps
+- Bars fill below a whole pixel — the pixel the fill stops on is lit in proportion to how far into it the value reaches — so a bar answers a change of a percent or two instead of sitting still until it has earned a whole pixel
+- When a stat drops, what it was a moment ago is left showing dimly behind the new reading for about a second, so damage and drain are visible as they happen rather than only once a threshold is crossed
+- The activity icon shows the skill you are training, or melee, ranged, or magic while fighting. If the values no longer fit beside it, they turn into bars on the bottom strip, which costs the line nothing horizontally. **Keep on screen** picks which stat gives up its digits last
 
 ### Skill progress
 
@@ -101,6 +105,7 @@ If the clock stops answering while you play, the plugin says so in the game chat
 ## Notes
 
 - Uses AWTRIX NG HTTP API v1 (`PUT /api/v1/apps/pushed/osrs`, `POST /api/v1/notifications`). Not the older AWTRIX 3 paths.
+- The compact and focus pages are drawn with the `draw` command list rather than handed over as text for the firmware to centre, which is what lets a value keep a fixed column. Text is placed with `["text", x, y, ...]`, where y is the baseline.
 - Pushed apps live in device RAM and disappear on clock reboot; the plugin re-sends them while you are logged in.
 - While you are logged in the rotation is the stats page and Time. Your own rotation is saved first and put back when you log out or turn the plugin off.
 - HTTP runs off the client thread via OkHttp `enqueue()`.
