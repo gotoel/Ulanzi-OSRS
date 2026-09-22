@@ -132,7 +132,7 @@ public interface UlanziConfig extends Config
 	)
 	default String afkText()
 	{
-		return "AFK";
+		return "AFK ";
 	}
 
 	@ConfigItem(
@@ -144,7 +144,7 @@ public interface UlanziConfig extends Config
 	)
 	default AfkEffect afkEffect()
 	{
-		return AfkEffect.RAINBOW_WAVE;
+		return AfkEffect.SOLID;
 	}
 
 	@ConfigItem(
@@ -231,7 +231,7 @@ public interface UlanziConfig extends Config
 	)
 	default AfkTintMode afkTintMode()
 	{
-		return AfkTintMode.VALUES;
+		return AfkTintMode.OFF;
 	}
 
 	@ConfigItem(
@@ -243,7 +243,7 @@ public interface UlanziConfig extends Config
 	)
 	default Color afkTintColor()
 	{
-		return new Color(128, 128, 128);
+		return new Color(145, 145, 145);
 	}
 
 	@ConfigItem(
@@ -327,7 +327,7 @@ public interface UlanziConfig extends Config
 	)
 	default boolean showSpec()
 	{
-		return true;
+		return false;
 	}
 
 	@ConfigItem(
@@ -377,7 +377,7 @@ public interface UlanziConfig extends Config
 	)
 	default boolean showActivity()
 	{
-		return false;
+		return true;
 	}
 
 	@ConfigItem(
@@ -511,7 +511,7 @@ public interface UlanziConfig extends Config
 	)
 	default OverlayPriority overlayPriority()
 	{
-		return OverlayPriority.ALERTS_FIRST;
+		return OverlayPriority.ROTATE;
 	}
 
 	@ConfigItem(
