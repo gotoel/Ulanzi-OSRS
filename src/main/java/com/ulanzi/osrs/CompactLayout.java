@@ -7,12 +7,12 @@ import java.util.List;
 /**
  * Where everything sits on the 32x8 panel in the compact layout.
  *
- * The panel is read in three tiers. Row 0 carries a short dash per value in the colour
- * that stat is always known by, so a number stays identifiable once its own colour has
- * ramped away towards red. Rows 1-5 carry the values, each in a slot wide enough for the
- * largest number that stat can reach and right aligned inside it, so a digit appearing or
- * disappearing changes that number in place instead of sliding the whole line sideways.
- * Row 7 is a strip of bars sharing the full width.
+ * Rows 1-5 carry the values, each in a slot wide enough for the largest number that stat
+ * can reach and right aligned inside it, so a digit appearing or disappearing changes that
+ * number in place instead of sliding the whole line sideways. Rows 0 and 6 are left clear
+ * so nothing crowds them. Row 7 is a strip of bars sharing the full width, each one tracked
+ * in the colour its stat is always known by, so an empty bar still says whose it is after
+ * the fill has ramped away towards red.
  *
  * Bars living on their own row is what makes the line fit: a value demoted to a bar gives
  * up its whole slot and costs nothing horizontally, where the old right-edge columns took
@@ -24,12 +24,14 @@ final class CompactLayout
 	static final int ICON_WIDTH = 8;
 	/** The small font advances 4px per character, the last column of which is blank. */
 	static final int CHAR_WIDTH = 4;
-	/** Dashes naming each value. */
-	static final int TICK_ROW = 0;
 	/**
 	 * The top of the glyph, not its baseline: the draw list places text from here down,
-	 * which is the opposite of what the scripting API's text() does. Five pixel capitals
-	 * from row 1 leave row 0 for the dashes and row 6 blank above the strip.
+	 * which is the opposite of what the scripting API's text() does.
+	 *
+	 * Five pixel digits from row 1 leave row 0 clear above them and row 6 clear below,
+	 * which is what makes them readable. There is no room for anything else up here: a
+	 * marker row, a blank, the digits, a blank and the strip is nine rows on a panel with
+	 * eight, and a marker sitting straight on top of a number merges into it.
 	 */
 	static final int TEXT_TOP = 1;
 	/** The bar strip, and for the focus layout the only row the large font leaves free. */
@@ -226,14 +228,6 @@ final class CompactLayout
 			// A blank column between segments, so two that are both dark still read apart.
 			cell.stripWidth = Math.max(1, end - start - (i < bars.size() - 1 ? 1 : 0));
 		}
-	}
-
-	/**
-	 * The dash naming a value runs the lit width of its slot.
-	 */
-	static int tickWidth(Cell cell)
-	{
-		return Math.max(1, cell.width - 1);
 	}
 
 	/**

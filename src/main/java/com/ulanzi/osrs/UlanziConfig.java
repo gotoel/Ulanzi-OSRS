@@ -337,9 +337,9 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "statsLayout",
 		name = "Layout",
-		description = "Big shows one large stat at a time with its orb icon, rotating. Compact shows every stat on one line, "
-			+ "named by a row of colored dashes, over a strip of bars. Focus shows whichever stat changed last in large "
-			+ "digits and keeps the rest on the bar strip.",
+		description = "Big shows one large stat at a time with its orb icon, rotating. Compact shows every stat on one "
+			+ "line over a strip of bars. Focus shows whichever stat changed last in large digits and keeps the rest on "
+			+ "the bar strip.",
 		position = 1,
 		section = statsSection
 	)

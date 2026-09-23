@@ -90,7 +90,8 @@ If the clock stops answering while you play, the plugin says so in the game chat
 ### Stats
 
 - **Big**: one large value at a time with its orb icon (heart, prayer star, boot, crossed swords), rotating
-- **Compact**: every value on one line, read in three tiers. A row of dashes along the top names each value in the colour that stat is always known by; the values sit in the middle; the bottom row is a strip of bars sharing the full width. Each value keeps a slot sized for the largest number that stat can reach and is right aligned in it, so a number changing from 100 to 99 changes in place instead of sliding the rest of the line sideways
+- **Compact**: every value on one line, with a strip of bars sharing the full width along the bottom row. Each value keeps a slot sized for the largest number that stat can reach and is right aligned in it, so a number changing from 100 to 99 changes in place instead of sliding the rest of the line sideways. The rows above and below the digits are left clear, since a panel eight pixels tall has no room for a marker over a number without the two running together
+- Each bar is tracked in the colour its stat is always known by, while the fill ramps with the value, so an empty bar still says whose it is after the fill has drained away towards red
 - **Focus**: whichever stat moved last, large, with every stat you have switched on keeping its bar on the bottom strip. It holds a stat for a couple of seconds once it has the panel, and only a bigger move takes it early, so run energy ticking over while you walk does not keep the panel to itself
 - Each stat is **Off**, **Value**, **Bar**, or **Both**
 - Every stat now answers its own value: full it keeps its own colour, and it ramps through amber to red as it drains, so a glance says something is running out before any of the digits have been read. Hitpoints used to be the only one that did this, and only in three steps

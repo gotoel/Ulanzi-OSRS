@@ -102,8 +102,6 @@ public class AwtrixClient
 	private static final double GHOST_LEVEL = 0.5;
 	/** A part-filled pixel never falls below this, so a trickle still shows. */
 	private static final int MIN_PARTIAL = 12;
-	/** The dashes naming the values are a label, so they sit under them rather than beside. */
-	private static final double TICK_LEVEL = 0.45;
 	/** The unfilled part of a bar, tinted with the stat's own colour. */
 	private static final double TRACK_LEVEL = 0.22;
 	/**
@@ -902,21 +900,9 @@ public class AwtrixClient
 		putStats(body);
 	}
 
-	/**
-	 * Dashes first, then values, then the strip, so a value drawn tight against its slot
-	 * edge lands on top of its own dash rather than under the next one.
-	 */
 	JsonArray compactDraw(List<CompactLayout.Cell> cells)
 	{
 		JsonArray draw = new JsonArray();
-		for (CompactLayout.Cell cell : cells)
-		{
-			if (cell.showsValue() && cell.identity != null && cell.x >= 0)
-			{
-				draw.add(drawCmd("rectFill", cell.x, CompactLayout.TICK_ROW,
-					CompactLayout.tickWidth(cell), 1, hex(brighten(cell.identity, TICK_LEVEL))));
-			}
-		}
 		for (CompactLayout.Cell cell : cells)
 		{
 			if (cell.showsValue() && cell.x >= 0)
@@ -957,8 +943,12 @@ public class AwtrixClient
 		int row = CompactLayout.STRIP_ROW;
 		int width = cell.stripWidth;
 		Color color = cell.color == null ? Color.WHITE : cell.color;
-		// Tinted rather than grey, so an empty segment still says which stat it belongs to.
-		draw.add(drawCmd("rectFill", cell.stripX, row, width, 1, hex(brighten(color, TRACK_LEVEL))));
+		// Tracked in the colour the stat is always known by rather than in the colour it
+		// has drained to, so an empty bar still says whose it is once the fill has ramped
+		// away towards red. This is the only thing left carrying that, now that a marker
+		// row over the digits turned out to sit too close to them to be readable.
+		Color track = cell.identity == null ? color : cell.identity;
+		draw.add(drawCmd("rectFill", cell.stripX, row, width, 1, hex(brighten(track, TRACK_LEVEL))));
 
 		// What the stat was a moment ago, left behind so a drop is visible as it happens.
 		// A dim panel has too few steps left to tell the trail from the track it sits on,
