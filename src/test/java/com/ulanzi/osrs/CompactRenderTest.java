@@ -17,6 +17,8 @@ import org.junit.Test;
 public class CompactRenderTest
 {
 	private static final int ICON = CompactLayout.ICON_WIDTH;
+	/** AWTRIX's small font: capitals are five pixels tall. */
+	private static final int CAP_HEIGHT = 5;
 
 	@Test
 	public void everyCommandStaysOnThePanelBesideAnIcon()
@@ -121,8 +123,10 @@ public class CompactRenderTest
 			}
 			if ("text".equals(op))
 			{
-				// The baseline has to leave the five pixel capitals room above it.
-				Assert.assertTrue("text baseline " + y, y >= 5);
+				// y is the top of the glyph, so five pixel capitals have to finish above
+				// the strip. Getting this the wrong way up ran the digits off the panel.
+				Assert.assertTrue("text top " + y, y >= 0);
+				Assert.assertTrue("text bottom " + (y + CAP_HEIGHT), y + CAP_HEIGHT <= CompactLayout.STRIP_ROW);
 			}
 			if ("pixel".equals(op))
 			{

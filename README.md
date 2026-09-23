@@ -105,7 +105,7 @@ If the clock stops answering while you play, the plugin says so in the game chat
 ## Notes
 
 - Uses AWTRIX NG HTTP API v1 (`PUT /api/v1/apps/pushed/osrs`, `POST /api/v1/notifications`). Not the older AWTRIX 3 paths.
-- The compact and focus pages are drawn with the `draw` command list rather than handed over as text for the firmware to centre, which is what lets a value keep a fixed column. Text is placed with `["text", x, y, ...]`, where y is the baseline.
+- The compact and focus pages are drawn with the `draw` command list rather than handed over as text for the firmware to centre, which is what lets a value keep a fixed column. Text is placed with `["text", x, y, ...]`, where y is the top of the glyph — the draw list's convention, not the scripting API's, where `text()` takes a baseline instead.
 - Pushed apps live in device RAM and disappear on clock reboot; the plugin re-sends them while you are logged in.
 - While you are logged in the rotation is the stats page and Time. Your own rotation is saved first and put back when you log out or turn the plugin off.
 - HTTP runs off the client thread via OkHttp `enqueue()`.

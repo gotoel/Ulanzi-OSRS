@@ -9,7 +9,7 @@ import java.util.List;
  *
  * The panel is read in three tiers. Row 0 carries a short dash per value in the colour
  * that stat is always known by, so a number stays identifiable once its own colour has
- * ramped away towards red. Rows 2-6 carry the values, each in a slot wide enough for the
+ * ramped away towards red. Rows 1-5 carry the values, each in a slot wide enough for the
  * largest number that stat can reach and right aligned inside it, so a digit appearing or
  * disappearing changes that number in place instead of sliding the whole line sideways.
  * Row 7 is a strip of bars sharing the full width.
@@ -26,8 +26,12 @@ final class CompactLayout
 	static final int CHAR_WIDTH = 4;
 	/** Dashes naming each value. */
 	static final int TICK_ROW = 0;
-	/** Baseline, not the top: a five pixel line sits on rows 2-6 from here. */
-	static final int TEXT_BASELINE = 6;
+	/**
+	 * The top of the glyph, not its baseline: the draw list places text from here down,
+	 * which is the opposite of what the scripting API's text() does. Five pixel capitals
+	 * from row 1 leave row 0 for the dashes and row 6 blank above the strip.
+	 */
+	static final int TEXT_TOP = 1;
 	/** The bar strip, and for the focus layout the only row the large font leaves free. */
 	static final int STRIP_ROW = 7;
 	/** Two blank columns between values: the slot's own trailing column, and this. */

@@ -767,7 +767,7 @@ public class AwtrixClient
 		{
 			if (cell.showsValue() && cell.x >= 0)
 			{
-				draw.add(drawCmd("text", CompactLayout.textX(cell), CompactLayout.TEXT_BASELINE,
+				draw.add(drawCmd("text", CompactLayout.textX(cell), CompactLayout.TEXT_TOP,
 					cell.text, hex(cell.color)));
 			}
 		}
