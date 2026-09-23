@@ -58,6 +58,57 @@ public class StatDisplayTest
 	}
 
 	/**
+	 * The clock scales every channel again for the room it is in, so a colour already close
+	 * to black lands under what an LED can show once the lights go out.
+	 */
+	@Test
+	public void aLitColourIsNeverSentCloseToBlack()
+	{
+		Color faint = AwtrixClient.lift(new Color(8, 4, 0), 40);
+		Assert.assertEquals(40, Math.max(faint.getRed(), Math.max(faint.getGreen(), faint.getBlue())));
+		// The hue survives being lifted, so a track still says which stat it belongs to.
+		Assert.assertEquals(8.0 / 4.0, faint.getRed() / (double) faint.getGreen(), 0.3);
+	}
+
+	@Test
+	public void blackStaysBlackSoBackgroundsAndIconsDoNotGlow()
+	{
+		Assert.assertEquals(Color.BLACK, AwtrixClient.lift(Color.BLACK, 40));
+	}
+
+	@Test
+	public void alreadyBrightColoursAreLeftAlone()
+	{
+		Assert.assertEquals(Color.WHITE, AwtrixClient.lift(Color.WHITE, 40));
+		Color base = StatKind.PRAYER.getIdentity();
+		Assert.assertEquals(base, AwtrixClient.lift(base, 40));
+	}
+
+	/**
+	 * Track, trail and fill have to stay three different things at the pulse's resting dim,
+	 * which is where they were all being squeezed towards black at once.
+	 */
+	@Test
+	public void theBarsThreeLevelsStayApartAtTheRestingDim()
+	{
+		Color color = StatKind.PRAYER.getIdentity();
+		int track = peak(AwtrixClient.lift(AwtrixClient.brighten(
+			AwtrixClient.brighten(color, 0.22), UlanziOsrsPlugin.PULSE_REST), 40));
+		int ghost = peak(AwtrixClient.lift(AwtrixClient.brighten(
+			AwtrixClient.brighten(color, 0.5), UlanziOsrsPlugin.PULSE_REST), 40));
+		int fill = peak(AwtrixClient.lift(AwtrixClient.brighten(color, UlanziOsrsPlugin.PULSE_REST), 40));
+
+		Assert.assertTrue("track " + track + " under the floor", track >= 40);
+		Assert.assertTrue("trail " + ghost + " not above track " + track, ghost > track);
+		Assert.assertTrue("fill " + fill + " not above trail " + ghost, fill > ghost);
+	}
+
+	private static int peak(Color color)
+	{
+		return Math.max(color.getRed(), Math.max(color.getGreen(), color.getBlue()));
+	}
+
+	/**
 	 * The bar answers a change of a percent or two instead of waiting to earn a whole
 	 * pixel, which is what the old eight-row column made it do.
 	 */

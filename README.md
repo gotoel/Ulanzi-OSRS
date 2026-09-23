@@ -62,6 +62,13 @@ In the plugin config:
 2. Toggle **Test connection**. The clock should flash a green `OK`, and the result is posted in the game chat.
 3. Enable the AFK and stats options you want.
 
+**Brightness** decides who sets the panel level. *Leave to the clock* follows its light
+sensor, which takes a dark room far enough down that the dimmer half of a page — bar
+tracks, the gradient's low end, the resting dim of a pulse — falls under what the LEDs can
+show. *Fixed* pins the panel instead, since the firmware has no floor under its automatic
+setting. Whatever the clock was set to is read once and put back when you log out or
+switch the plugin off, the same as your app rotation.
+
 If the clock stops answering while you play, the plugin says so in the game chat, and again when it is back.
 
 ### AFK
@@ -81,6 +88,7 @@ If the clock stops answering while you play, the plugin says so in the game chat
 - Every stat now answers its own value: full it keeps its own colour, and it ramps through amber to red as it drains, so a glance says something is running out before any of the digits have been read. Hitpoints used to be the only one that did this, and only in three steps
 - Bars fill below a whole pixel — the pixel the fill stops on is lit in proportion to how far into it the value reaches — so a bar answers a change of a percent or two instead of sitting still until it has earned a whole pixel
 - When a stat drops, what it was a moment ago is left showing dimly behind the new reading for about a second, so damage and drain are visible as they happen rather than only once a threshold is crossed
+- Nothing lit is sent close to black. The clock scales every channel again for the room it is in, so a colour already most of the way down lands under what an LED can show once the lights go out — a bar's track, its trail and its fill were all being squeezed together. Dim things keep a floor, and their hue, so the three stay three
 - The activity icon shows the skill you are training, or melee, ranged, or magic while fighting. If the values no longer fit beside it, they turn into bars on the bottom strip, which costs the line nothing horizontally. **Keep on screen** picks which stat gives up its digits last
 
 ### Skill progress

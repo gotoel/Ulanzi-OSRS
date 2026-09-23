@@ -2,6 +2,7 @@ package com.ulanzi.osrs;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -183,6 +184,26 @@ public class SkillActivityTrackerTest
 		Assert.assertTrue(ThresholdUnit.PERCENT.isLow(2, 10, 25));
 		Assert.assertTrue(ThresholdUnit.POINTS.isLow(20, 99, 20));
 		Assert.assertFalse(ThresholdUnit.POINTS.isLow(21, 99, 20));
+	}
+
+	@Test
+	public void theClocksOwnBrightnessIsReadBackSoItCanBePutAgain()
+	{
+		JsonObject settings = new Gson().fromJson(
+			"{\"autoBrightness\":true,\"brightness\":37,\"somethingElse\":1}", JsonObject.class);
+		AwtrixClient.Brightness saved = AwtrixClient.parseBrightness(settings);
+		Assert.assertTrue(saved.automatic);
+		Assert.assertEquals(37, saved.level);
+		Assert.assertEquals("{\"autoBrightness\":true,\"brightness\":37}", saved.toJson().toString());
+	}
+
+	@Test
+	public void aClockThatNamesNoBrightnessFallsBackToTheFirmwareDefault()
+	{
+		AwtrixClient.Brightness saved = AwtrixClient.parseBrightness(
+			new Gson().fromJson("{}", JsonObject.class));
+		Assert.assertFalse(saved.automatic);
+		Assert.assertEquals(120, saved.level);
 	}
 
 	@Test

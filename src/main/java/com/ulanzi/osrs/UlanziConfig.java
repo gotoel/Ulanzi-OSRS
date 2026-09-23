@@ -105,6 +105,33 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "brightnessMode",
+		name = "Brightness",
+		description = "Leave to the clock follows its light sensor, which takes a dark room far enough down that the "
+			+ "dimmer half of a page stops being readable. Fixed pins the panel instead. Whatever the clock was set to "
+			+ "is put back when you log out or switch the plugin off.",
+		position = 4,
+		section = connectionSection
+	)
+	default BrightnessMode brightnessMode()
+	{
+		return BrightnessMode.DEVICE;
+	}
+
+	@ConfigItem(
+		keyName = "brightness",
+		name = "Fixed brightness",
+		description = "Panel brightness to hold when Brightness is Fixed. The clock's own scale, not a percent.",
+		position = 5,
+		section = connectionSection
+	)
+	@Range(min = 1, max = 255)
+	default int brightness()
+	{
+		return 120;
+	}
+
+	@ConfigItem(
 		keyName = "afkEnabled",
 		name = "AFK indicator",
 		description = "Show AFK when you go idle. Walking, running, or clicking to move clears it. Moving the mouse does not.",

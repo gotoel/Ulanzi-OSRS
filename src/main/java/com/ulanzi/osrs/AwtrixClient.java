@@ -72,6 +72,9 @@ public class AwtrixClient
 	private final AtomicReference<AppLoop> savedLoop = new AtomicReference<>();
 	private final AtomicBoolean loopSnapshotTried = new AtomicBoolean(false);
 	private final AtomicBoolean loopChanged = new AtomicBoolean(false);
+	private final AtomicReference<Brightness> savedBrightness = new AtomicReference<>();
+	private final AtomicBoolean brightnessSnapshotTried = new AtomicBoolean(false);
+	private final AtomicReference<String> appliedBrightness = new AtomicReference<>();
 	private final AtomicReference<Boolean> reachable = new AtomicReference<>();
 	private volatile Consumer<String> messages = message -> { };
 	private volatile double pulse = 1.0;
@@ -81,12 +84,27 @@ public class AwtrixClient
 	private static final double MIN_PULSE = 0.2;
 	private static final double MAX_PULSE = 3.0;
 	private static final int PULSE_ICON_CACHE = 64;
-	/** How far down a reading that has just been lost is left showing. */
-	private static final double GHOST_LEVEL = 0.35;
+	/**
+	 * How far down a reading that has just been lost is left showing. It has to clear the
+	 * floor even after the pulse's resting dim has halved it, or a trail and the track it
+	 * sits on come out the same colour.
+	 */
+	private static final double GHOST_LEVEL = 0.5;
 	/** A part-filled pixel never falls below this, so a trickle still shows. */
 	private static final int MIN_PARTIAL = 12;
 	/** The dashes naming the values are a label, so they sit under them rather than beside. */
 	private static final double TICK_LEVEL = 0.45;
+	/** The unfilled part of a bar, tinted with the stat's own colour. */
+	private static final double TRACK_LEVEL = 0.22;
+	/**
+	 * Nothing lit is sent below this. The clock scales every channel again for the room it
+	 * is in, so a colour already taken most of the way to black lands under what an LED can
+	 * show once the lights go out: the bar tracks and the trail stopped existing in a dark
+	 * room, and the pulse's resting dim halved them again on the way. Holding a floor costs
+	 * a little contrast on a bright panel and keeps the page readable on a dim one.
+	 */
+	private static final int VISIBLE_FLOOR = 40;
+	private static final Color TRACK = new Color(48, 48, 48);
 
 	@Inject
 	AwtrixClient(OkHttpClient httpClient, UlanziConfig config, Gson gson)
@@ -119,7 +137,36 @@ public class AwtrixClient
 
 	private String hex(Color color)
 	{
+		return toHex(lift(brighten(color, pulse), VISIBLE_FLOOR));
+	}
+
+	/**
+	 * A background is allowed to be as near black as it likes, so it skips the floor.
+	 */
+	private String hexBackground(Color color)
+	{
 		return toHex(brighten(color, pulse));
+	}
+
+	/**
+	 * Lifts a lit colour until its brightest channel clears the floor, holding its hue and
+	 * so its identity. Black is left alone: an unlit pixel has to stay unlit, or the
+	 * background would come up grey and every icon would glow.
+	 */
+	static Color lift(Color color, int minimum)
+	{
+		int peak = Math.max(color.getRed(), Math.max(color.getGreen(), color.getBlue()));
+		if (peak == 0 || peak >= minimum)
+		{
+			return color;
+		}
+		return new Color(lift(color.getRed(), peak, minimum), lift(color.getGreen(), peak, minimum),
+			lift(color.getBlue(), peak, minimum));
+	}
+
+	private static int lift(int channel, int peak, int minimum)
+	{
+		return Math.max(0, Math.min(255, (int) Math.round(channel * (double) minimum / peak)));
 	}
 
 	static Color brighten(Color color, double factor)
@@ -438,7 +485,7 @@ public class AwtrixClient
 		}
 		else if (effect.usesPaletteText())
 		{
-			body.addProperty("backgroundColor", hex(config.afkBackgroundColor()));
+			body.addProperty("backgroundColor", hexBackground(config.afkBackgroundColor()));
 			body.addProperty("palette", effect.paletteName());
 			body.addProperty("textColor", "palette");
 			body.addProperty("paletteSpan", 16);
@@ -447,7 +494,7 @@ public class AwtrixClient
 		}
 		else
 		{
-			body.addProperty("backgroundColor", hex(config.afkBackgroundColor()));
+			body.addProperty("backgroundColor", hexBackground(config.afkBackgroundColor()));
 			body.addProperty("textColor", hex(config.afkTextColor()));
 			if (config.afkBlink())
 			{
@@ -633,7 +680,7 @@ public class AwtrixClient
 		body.addProperty("name", name);
 		body.addProperty("text", text);
 		body.addProperty("textColor", hex(textColor));
-		body.addProperty("backgroundColor", hex(background));
+		body.addProperty("backgroundColor", hexBackground(background));
 		body.addProperty("font", "large");
 		body.addProperty("textCenter", true);
 		body.add("scroll", scrollStatic());
@@ -688,14 +735,14 @@ public class AwtrixClient
 		applyActivityIcon(body, activityIcon);
 		if (background != null)
 		{
-			body.addProperty("backgroundColor", hex(background));
+			body.addProperty("backgroundColor", hexBackground(background));
 		}
 
 		if (progressPercent >= 0)
 		{
 			body.addProperty("progress", progressPercent);
 			body.addProperty("progressColor", hex(progressColor));
-			body.addProperty("progressTrackColor", "#202020");
+			body.addProperty("progressTrackColor", hex(TRACK));
 			body.addProperty("textInFront", true);
 		}
 
@@ -718,7 +765,7 @@ public class AwtrixClient
 		applyActivityIcon(body, activityIcon);
 		if (background != null)
 		{
-			body.addProperty("backgroundColor", hex(background));
+			body.addProperty("backgroundColor", hexBackground(background));
 		}
 		body.add("draw", compactDraw(cells));
 		putStats(body);
@@ -742,7 +789,7 @@ public class AwtrixClient
 		applyActivityIcon(body, activityIcon);
 		if (background != null)
 		{
-			body.addProperty("backgroundColor", hex(background));
+			body.addProperty("backgroundColor", hexBackground(background));
 		}
 		body.add("draw", stripDraw(cells));
 		putStats(body);
@@ -803,7 +850,8 @@ public class AwtrixClient
 		int row = CompactLayout.STRIP_ROW;
 		int width = cell.stripWidth;
 		Color color = cell.color == null ? Color.WHITE : cell.color;
-		draw.add(drawCmd("rectFill", cell.stripX, row, width, 1, "#202020"));
+		// Tinted rather than grey, so an empty segment still says which stat it belongs to.
+		draw.add(drawCmd("rectFill", cell.stripX, row, width, 1, hex(brighten(color, TRACK_LEVEL))));
 
 		// What the stat was a moment ago, left behind so a drop is visible as it happens.
 		if (cell.ghostPercent > cell.percent)
@@ -880,7 +928,7 @@ public class AwtrixClient
 			body.add("palette", palette);
 			body.addProperty("progress", progressPercent);
 			body.addProperty("progressColor", "palette");
-			body.addProperty("progressTrackColor", "#202020");
+			body.addProperty("progressTrackColor", hex(TRACK));
 			body.addProperty("textInFront", true);
 		}
 		putStats(body);
@@ -909,6 +957,7 @@ public class AwtrixClient
 	void clearAll()
 	{
 		clearCache();
+		restoreBrightness();
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_AFK, null, null);
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_LOW_HP, null, null);
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_LOW_PRAY, null, null);
@@ -977,6 +1026,97 @@ public class AwtrixClient
 			ensureStatsLoop();
 			activateStats();
 		});
+	}
+
+	/**
+	 * Holds the panel where the config asks, if it asks at all.
+	 *
+	 * The clock's light sensor takes a dark room a long way down and has no floor under it,
+	 * so the dimmer half of a page stops being legible once the lights go out. What the
+	 * clock was set to is read once and put back on the way out, the same as the rotation.
+	 */
+	void applyBrightness()
+	{
+		if (config.brightnessMode() != BrightnessMode.FIXED)
+		{
+			restoreBrightness();
+			return;
+		}
+
+		JsonObject wanted = new JsonObject();
+		wanted.addProperty("autoBrightness", false);
+		wanted.addProperty("brightness", Math.max(1, Math.min(255, config.brightness())));
+		String json = wanted.toString();
+		if (json.equals(appliedBrightness.get()))
+		{
+			return;
+		}
+
+		if (savedBrightness.get() != null || brightnessSnapshotTried.getAndSet(true))
+		{
+			putBrightness(json);
+			return;
+		}
+		send("GET", "/api/v1/settings", null, false, result ->
+		{
+			if (result.ok && result.body != null)
+			{
+				try
+				{
+					JsonObject settings = gson.fromJson(result.body, JsonObject.class);
+					if (settings != null)
+					{
+						savedBrightness.compareAndSet(null, parseBrightness(settings));
+					}
+				}
+				catch (JsonParseException ex)
+				{
+					log.debug("Could not read the clock's settings", ex);
+				}
+			}
+			putBrightness(json);
+		});
+	}
+
+	private void putBrightness(String json)
+	{
+		appliedBrightness.set(json);
+		enqueue("PATCH", "/api/v1/settings", json, ok ->
+		{
+			if (!ok)
+			{
+				// Forgotten, so the next refresh tries again and the clock is not put
+				// back to a setting it never left.
+				appliedBrightness.set(null);
+			}
+		});
+	}
+
+	/**
+	 * Puts the clock's own brightness back. Nothing is sent if we never changed it.
+	 */
+	private void restoreBrightness()
+	{
+		brightnessSnapshotTried.set(false);
+		if (appliedBrightness.getAndSet(null) == null)
+		{
+			return;
+		}
+		Brightness saved = savedBrightness.getAndSet(null);
+		if (saved == null)
+		{
+			return;
+		}
+		enqueue("PATCH", "/api/v1/settings", saved.toJson().toString(), null);
+	}
+
+	static Brightness parseBrightness(JsonObject settings)
+	{
+		JsonElement auto = settings.get("autoBrightness");
+		JsonElement level = settings.get("brightness");
+		return new Brightness(
+			auto != null && auto.isJsonPrimitive() && auto.getAsBoolean(),
+			level != null && level.isJsonPrimitive() ? level.getAsInt() : 120);
 	}
 
 	private void ensureStatsLoop()
@@ -1273,6 +1413,26 @@ public class AwtrixClient
 	{
 		String text;
 		Color color;
+	}
+
+	static final class Brightness
+	{
+		final boolean automatic;
+		final int level;
+
+		Brightness(boolean automatic, int level)
+		{
+			this.automatic = automatic;
+			this.level = level;
+		}
+
+		JsonObject toJson()
+		{
+			JsonObject body = new JsonObject();
+			body.addProperty("autoBrightness", automatic);
+			body.addProperty("brightness", level);
+			return body;
+		}
 	}
 
 	static final class AppLoop

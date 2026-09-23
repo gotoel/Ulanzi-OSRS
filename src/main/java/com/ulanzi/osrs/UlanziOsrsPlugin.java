@@ -535,6 +535,9 @@ public class UlanziOsrsPlugin extends Plugin
 			int energy = Math.min(100, Math.max(0, client.getEnergy() / 100));
 			int spec = Math.min(100, Math.max(0, client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT) / 10));
 
+			// A no-op once it has taken, and a retry if the clock was not answering yet.
+			awtrixClient.applyBrightness();
+
 			// Threshold alerts are pushed below, before the page is picked, and are
 			// there to be noticed, so they never take the pulse's resting dim.
 			awtrixClient.setPulse(1.0);

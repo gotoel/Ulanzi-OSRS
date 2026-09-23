@@ -62,7 +62,7 @@ public class CompactRenderTest
 	private boolean hasGhostPixels(List<CompactLayout.Cell> cells)
 	{
 		JsonArray draw = render(cells);
-		Color dim = AwtrixClient.brighten(Color.WHITE, 0.35);
+		Color dim = AwtrixClient.brighten(Color.WHITE, 0.5);
 		String hex = AwtrixClient.toHex(dim);
 		for (JsonElement element : draw)
 		{
