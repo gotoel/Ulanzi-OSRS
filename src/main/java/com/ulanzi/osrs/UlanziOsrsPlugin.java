@@ -861,20 +861,22 @@ public class UlanziOsrsPlugin extends Plugin
 		boolean flashPray = lowPray && config.lowPrayerFlash();
 		compactFlashOn = (flashHp || flashPray) && !compactFlashOn;
 
-		// Every stat answers its own value now, not just hitpoints, so a glance says
-		// something is running out before any of the digits have been read.
-		Color hpColor = StatRamp.drain(StatKind.HITPOINTS.getIdentity(), hpPercent);
+		// Each stat answers its own value, so a glance says something is running out
+		// before any of the digits have been read. Prayer is the one that does not: it
+		// holds its blue at every level and lets the orb and the bar carry how much is
+		// left. See StatKind#drained.
+		Color hpColor = StatKind.HITPOINTS.drained(hpPercent);
 		if (flashHp)
 		{
 			hpColor = compactFlashOn ? Color.RED : HP_FLASH_OFF;
 		}
-		Color prayColor = StatRamp.drain(StatKind.PRAYER.getIdentity(), prayerPercent);
+		Color prayColor = StatKind.PRAYER.drained(prayerPercent);
 		if (flashPray)
 		{
 			prayColor = compactFlashOn ? StatKind.PRAYER.getIdentity() : PRAYER_FLASH_OFF;
 		}
-		Color energyColor = StatRamp.drain(StatKind.ENERGY.getIdentity(), energy);
-		Color specColor = StatRamp.drain(StatKind.SPEC.getIdentity(), spec);
+		Color energyColor = StatKind.ENERGY.drained(energy);
+		Color specColor = StatKind.SPEC.drained(spec);
 
 		AfkTintMode tintMode = focus == OverlayKind.AFK ? config.afkTintMode() : AfkTintMode.OFF;
 		Color tint = tintMode != AfkTintMode.OFF ? config.afkTintColor() : null;
@@ -931,12 +933,16 @@ public class UlanziOsrsPlugin extends Plugin
 				cells.add(CompactLayout.Cell.label(AwtrixClient.truncate(config.afkText(), 4), labelColor));
 			}
 
-			addCell(cells, StatKind.HITPOINTS, hpStyle, hitpoints, hpPercent, hitpointsMax, hpColor, valueTint, now);
-			addCell(cells, StatKind.PRAYER, prayerStyle, prayer, prayerPercent, prayerMax, prayColor, valueTint, now);
+			boolean orbs = config.statOrbs();
+			addCell(cells, StatKind.HITPOINTS, hpStyle, hitpoints, hpPercent, hitpointsMax, hpColor, valueTint,
+				now, orbs);
+			addCell(cells, StatKind.PRAYER, prayerStyle, prayer, prayerPercent, prayerMax, prayColor, valueTint,
+				now, orbs);
 			if (routine)
 			{
-				addCell(cells, StatKind.ENERGY, config.energyStyle(), energy, energy, 100, energyColor, valueTint, now);
-				addCell(cells, StatKind.SPEC, config.specStyle(), spec, spec, 100, specColor, valueTint, now);
+				addCell(cells, StatKind.ENERGY, config.energyStyle(), energy, energy, 100, energyColor, valueTint,
+					now, orbs);
+				addCell(cells, StatKind.SPEC, config.specStyle(), spec, spec, 100, specColor, valueTint, now, orbs);
 			}
 
 			CompactLayout.fit(cells, icon, config.compactPriority());
@@ -1011,13 +1017,19 @@ public class UlanziOsrsPlugin extends Plugin
 	private void addCell(List<CompactLayout.Cell> cells, StatKind kind, StatStyle style, int value, int percent,
 		int ceiling, Color color, Color tint, long now)
 	{
+		addCell(cells, kind, style, value, percent, ceiling, color, tint, now, false);
+	}
+
+	private void addCell(List<CompactLayout.Cell> cells, StatKind kind, StatStyle style, int value, int percent,
+		int ceiling, Color color, Color tint, long now, boolean orbs)
+	{
 		if (!style.isShown())
 		{
 			return;
 		}
 		cells.add(new CompactLayout.Cell(kind, style, String.valueOf(value),
 			kind.digitsFor(Math.max(ceiling, value)), percent, ghostFor(kind, now),
-			color, tint != null ? tint : kind.getIdentity()));
+			color, tint != null ? tint : kind.getIdentity(), orbs ? kind.getOrb() : null));
 	}
 
 	private static StatStyle atLeastValue(StatStyle style)

@@ -17,6 +17,12 @@ import java.util.List;
  * Bars living on their own row is what makes the line fit: a value demoted to a bar gives
  * up its whole slot and costs nothing horizontally, where the old right-edge columns took
  * 2px off the text no matter what.
+ *
+ * A {@link StatOrb} stands at either end of whatever room is left, the left one first and
+ * the right one hard against the panel edge. They cost the values six columns apiece, which
+ * is most of a three digit slot, so switching them on is what pushes run energy and special
+ * attack down onto the strip. The strip itself is not shortened: the orbs stop at row 5,
+ * and bars are free to run underneath them.
  */
 final class CompactLayout
 {
@@ -38,6 +44,8 @@ final class CompactLayout
 	static final int STRIP_ROW = 7;
 	/** Two blank columns between values: the slot's own trailing column, and this. */
 	private static final int GAP = 1;
+	/** A blank column between an orb and the values, on top of the slot's own. */
+	private static final int ORB_GAP = 1;
 
 	private CompactLayout()
 	{
@@ -59,14 +67,23 @@ final class CompactLayout
 		final int ghostPercent;
 		final Color color;
 		final Color identity;
+		/** The glyph this stat fills at the edge of the page, or null if it has none. */
+		final StatOrb orb;
 
 		int x = -1;
 		int width;
 		int stripX = -1;
 		int stripWidth;
+		int orbX = -1;
 
 		Cell(StatKind kind, StatStyle style, String text, int digits, int percent, int ghostPercent,
 			Color color, Color identity)
+		{
+			this(kind, style, text, digits, percent, ghostPercent, color, identity, null);
+		}
+
+		Cell(StatKind kind, StatStyle style, String text, int digits, int percent, int ghostPercent,
+			Color color, Color identity, StatOrb orb)
 		{
 			this.kind = kind;
 			this.style = style;
@@ -76,6 +93,7 @@ final class CompactLayout
 			this.ghostPercent = ghostPercent;
 			this.color = color;
 			this.identity = identity;
+			this.orb = orb;
 		}
 
 		/** A label has no stat behind it, so it can never be demoted to a bar. */
@@ -93,11 +111,53 @@ final class CompactLayout
 		{
 			return style.showsBar() && percent >= 0;
 		}
+
+		/**
+		 * An orb is drawn whatever style the stat is in: it is the reading itself, not a
+		 * fallback for a value that would not fit. It does need a reading to draw.
+		 */
+		boolean showsOrb()
+		{
+			return orb != null && percent >= 0;
+		}
 	}
 
-	static int available(boolean icon)
+	/**
+	 * Room for the values: the panel, less the activity icon, less whichever orbs are up.
+	 */
+	static int available(List<Cell> cells, boolean icon)
 	{
-		return PANEL_WIDTH - (icon ? ICON_WIDTH : 0);
+		return PANEL_WIDTH - (icon ? ICON_WIDTH : 0) - orbReserve(cells);
+	}
+
+	private static Cell orb(List<Cell> cells, boolean rightHand)
+	{
+		for (Cell cell : cells)
+		{
+			if (cell.showsOrb() && cell.orb.isRightHand() == rightHand)
+			{
+				return cell;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * What the orbs take off the line. Each side is counted on its own, so one orb alone
+	 * does not cost the values the other one's columns as well.
+	 */
+	private static int orbReserve(List<Cell> cells)
+	{
+		int reserve = 0;
+		if (orb(cells, false) != null)
+		{
+			reserve += StatOrb.WIDTH + ORB_GAP;
+		}
+		if (orb(cells, true) != null)
+		{
+			reserve += StatOrb.WIDTH + ORB_GAP;
+		}
+		return reserve;
 	}
 
 	/**
@@ -126,7 +186,7 @@ final class CompactLayout
 
 	static boolean fits(List<Cell> cells, boolean icon)
 	{
-		return lineWidth(cells) <= available(icon);
+		return lineWidth(cells) <= available(cells, icon);
 	}
 
 	/**
@@ -186,8 +246,21 @@ final class CompactLayout
 	static void place(List<Cell> cells, boolean icon)
 	{
 		int origin = icon ? ICON_WIDTH : 0;
-		placeValues(cells, origin, available(icon));
-		placeBars(cells, origin, available(icon));
+		Cell left = orb(cells, false);
+		Cell right = orb(cells, true);
+		if (left != null)
+		{
+			left.orbX = origin;
+		}
+		if (right != null)
+		{
+			right.orbX = PANEL_WIDTH - StatOrb.WIDTH;
+		}
+		int textOrigin = origin + (left != null ? StatOrb.WIDTH + ORB_GAP : 0);
+		placeValues(cells, textOrigin, available(cells, icon));
+		// The full width, not the room the values were left: the orbs stop above the strip,
+		// so shortening the bars to clear them would give away pixels for nothing.
+		placeBars(cells, origin, PANEL_WIDTH - origin);
 	}
 
 	private static void placeValues(List<Cell> cells, int origin, int available)

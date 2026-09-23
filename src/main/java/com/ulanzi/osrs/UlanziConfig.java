@@ -410,10 +410,24 @@ public interface UlanziConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "statOrbs",
+		name = "Drain orbs",
+		description = "Compact layout: a heart at the left edge and a prayer diamond at the right, each emptying "
+			+ "from the top as the stat drains, so both read at a glance without the number. They take six columns "
+			+ "each, which usually pushes run energy and special attack onto the bottom strip.",
+		position = 7,
+		section = statsSection
+	)
+	default boolean statOrbs()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "statsRotateSeconds",
 		name = "Rotate every",
 		description = "Big layout: how long each stat stays on screen before rotating.",
-		position = 7,
+		position = 8,
 		section = statsSection
 	)
 	@Range(min = 1, max = 30)
@@ -427,7 +441,7 @@ public interface UlanziConfig extends Config
 		keyName = "showActivity",
 		name = "Activity icon",
 		description = "Show an icon while skilling, and a melee, ranged, or magic icon while you are attacking with that style. If the compact line no longer fits beside it, values switch to bars on the bottom strip.",
-		position = 8,
+		position = 9,
 		section = statsSection
 	)
 	default boolean showActivity()
@@ -439,7 +453,7 @@ public interface UlanziConfig extends Config
 		keyName = "activityHoldSeconds",
 		name = "Activity hold",
 		description = "Seconds to keep the icon after the action stops. 0 clears it on the next tick. Increase it if walking between trees or rocks makes the icon flicker.",
-		position = 9,
+		position = 10,
 		section = statsSection
 	)
 	@Range(min = 0, max = 30)

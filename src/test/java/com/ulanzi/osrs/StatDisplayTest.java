@@ -29,6 +29,24 @@ public class StatDisplayTest
 	}
 
 	@Test
+	public void prayerHoldsItsBlueAllTheWayDownWhileTheOthersRamp()
+	{
+		Color blue = StatKind.PRAYER.getIdentity();
+		for (int percent = 100; percent >= 0; percent--)
+		{
+			Assert.assertEquals("prayer at " + percent, blue, StatKind.PRAYER.drained(percent));
+		}
+
+		for (StatKind kind : new StatKind[] {StatKind.HITPOINTS, StatKind.ENERGY, StatKind.SPEC})
+		{
+			Color empty = kind.drained(0);
+			Assert.assertEquals(kind.getName(), kind.getIdentity(), kind.drained(100));
+			Assert.assertNotEquals(kind.getName(), kind.getIdentity(), empty);
+			Assert.assertTrue(kind.getName() + " runs out red", empty.getRed() > empty.getBlue());
+		}
+	}
+
+	@Test
 	public void theRampIsContinuous()
 	{
 		Color base = StatKind.HITPOINTS.getIdentity();

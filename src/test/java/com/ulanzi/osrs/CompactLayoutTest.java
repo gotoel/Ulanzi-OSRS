@@ -143,6 +143,107 @@ public class CompactLayoutTest
 		Assert.assertEquals(3, StatKind.ENERGY.digitsFor(4));
 	}
 
+	@Test
+	public void orbsTakeTheTwoEndsAndPushRunEnergyOntoTheStrip()
+	{
+		List<CompactLayout.Cell> cells = orbed();
+		CompactLayout.fit(cells, false, StatKind.HITPOINTS);
+		CompactLayout.place(cells, false);
+
+		// Six columns off each end leaves twenty, which holds the two 2-digit slots but
+		// not run energy's three.
+		Assert.assertEquals(20, CompactLayout.available(cells, false));
+		Assert.assertEquals(StatStyle.VALUE, cells.get(0).style);
+		Assert.assertEquals(StatStyle.VALUE, cells.get(1).style);
+		Assert.assertEquals(StatStyle.BAR, cells.get(2).style);
+
+		Assert.assertEquals(0, cells.get(0).orbX);
+		Assert.assertEquals(CompactLayout.PANEL_WIDTH - StatOrb.WIDTH, cells.get(1).orbX);
+		Assert.assertEquals(-1, cells.get(2).orbX);
+	}
+
+	@Test
+	public void theValuesSitClearOfBothOrbs()
+	{
+		List<CompactLayout.Cell> cells = orbed();
+		CompactLayout.fit(cells, false, StatKind.HITPOINTS);
+		CompactLayout.place(cells, false);
+
+		for (CompactLayout.Cell cell : cells)
+		{
+			if (!cell.showsValue())
+			{
+				continue;
+			}
+			Assert.assertTrue(cell.kind.getName() + " starts at " + cell.x, cell.x >= StatOrb.WIDTH + 1);
+			int right = cell.x + cell.width;
+			Assert.assertTrue(cell.kind.getName() + " ends at " + right,
+				right <= CompactLayout.PANEL_WIDTH - StatOrb.WIDTH - 1);
+		}
+	}
+
+	@Test
+	public void oneOrbCostsTheLineOnlyItsOwnSide()
+	{
+		List<CompactLayout.Cell> cells = new ArrayList<>();
+		cells.add(orb(StatKind.HITPOINTS, StatStyle.VALUE, 99, 100, 99));
+		cells.add(cell(StatKind.PRAYER, StatStyle.VALUE, 70, 100, 70));
+		CompactLayout.place(cells, false);
+
+		Assert.assertEquals(CompactLayout.PANEL_WIDTH - StatOrb.WIDTH - 1,
+			CompactLayout.available(cells, false));
+		Assert.assertEquals(0, cells.get(0).orbX);
+		Assert.assertEquals(-1, cells.get(1).orbX);
+	}
+
+	/**
+	 * The activity icon owns the left of the panel, so the orbs stand inside whatever it
+	 * leaves rather than underneath it.
+	 */
+	@Test
+	public void theLeftOrbStandsBesideTheActivityIconRatherThanUnderIt()
+	{
+		List<CompactLayout.Cell> cells = orbed();
+		CompactLayout.fit(cells, true, StatKind.HITPOINTS);
+		CompactLayout.place(cells, true);
+
+		Assert.assertEquals(CompactLayout.ICON_WIDTH, cells.get(0).orbX);
+		Assert.assertEquals(CompactLayout.PANEL_WIDTH - StatOrb.WIDTH, cells.get(1).orbX);
+		Assert.assertEquals(12, CompactLayout.available(cells, true));
+		Assert.assertTrue(CompactLayout.fits(cells, true));
+	}
+
+	/**
+	 * The orbs stop above the strip, so a bar running under them loses nothing.
+	 */
+	@Test
+	public void barsStillReachBothEdgesUnderTheOrbs()
+	{
+		List<CompactLayout.Cell> cells = orbed();
+		CompactLayout.fit(cells, false, StatKind.HITPOINTS);
+		CompactLayout.place(cells, false);
+
+		CompactLayout.Cell energy = cells.get(2);
+		Assert.assertEquals(0, energy.stripX);
+		Assert.assertEquals(CompactLayout.PANEL_WIDTH, energy.stripX + energy.stripWidth);
+	}
+
+	private static List<CompactLayout.Cell> orbed()
+	{
+		List<CompactLayout.Cell> cells = new ArrayList<>();
+		cells.add(orb(StatKind.HITPOINTS, StatStyle.VALUE, 99, 100, 99));
+		cells.add(orb(StatKind.PRAYER, StatStyle.VALUE, 70, 100, 70));
+		cells.add(cell(StatKind.ENERGY, StatStyle.VALUE, 100, 100, 100));
+		return cells;
+	}
+
+	private static CompactLayout.Cell orb(StatKind kind, StatStyle style, int value, int percent, int ceiling)
+	{
+		return new CompactLayout.Cell(kind, style, String.valueOf(value),
+			kind.digitsFor(Math.max(ceiling, value)), percent, -1, Color.WHITE, kind.getIdentity(),
+			kind.getOrb());
+	}
+
 	private static List<CompactLayout.Cell> defaults()
 	{
 		List<CompactLayout.Cell> cells = new ArrayList<>();

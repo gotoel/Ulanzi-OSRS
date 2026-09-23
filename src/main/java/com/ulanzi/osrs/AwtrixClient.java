@@ -905,6 +905,13 @@ public class AwtrixClient
 		JsonArray draw = new JsonArray();
 		for (CompactLayout.Cell cell : cells)
 		{
+			if (cell.showsOrb() && cell.orbX >= 0)
+			{
+				appendOrb(draw, cell);
+			}
+		}
+		for (CompactLayout.Cell cell : cells)
+		{
 			if (cell.showsValue() && cell.x >= 0)
 			{
 				draw.add(drawCmd("text", CompactLayout.textX(cell), CompactLayout.TEXT_TOP,
@@ -913,6 +920,47 @@ public class AwtrixClient
 		}
 		appendStrip(draw, cells);
 		return draw;
+	}
+
+	/**
+	 * One stat's orb, filled from the bottom like a vessel.
+	 *
+	 * The row the fill stops on is lit in proportion to how far into it the value reaches,
+	 * the same as a bar, which is what saves six rows from reading as six steps. What is
+	 * left above the fill is painted in the stat's own colour rather than the one it has
+	 * drained to: an emptied hitpoints orb is a dim green heart, not a dim red one, so the
+	 * shape and the hue still agree about whose it is.
+	 */
+	private void appendOrb(JsonArray draw, CompactLayout.Cell cell)
+	{
+		StatOrb orb = cell.orb;
+		Color lit = cell.color == null ? Color.WHITE : cell.color;
+		Color track = cell.identity == null ? lit : cell.identity;
+		String empty = hex(brighten(track, TRACK_LEVEL));
+		double level = Math.max(0, Math.min(100, cell.percent)) / 100.0 * StatOrb.HEIGHT;
+
+		for (int y = 0; y < StatOrb.HEIGHT; y++)
+		{
+			// Rows fill from the bottom up, so the last row is the first to light.
+			int below = StatOrb.HEIGHT - 1 - y;
+			String color;
+			if (level >= below + 1)
+			{
+				color = hex(lit);
+			}
+			else if (level > below)
+			{
+				color = hex(brighten(lit, Math.max(TRACK_LEVEL, level - below)));
+			}
+			else
+			{
+				color = empty;
+			}
+			for (int[] run : orb.runs(y))
+			{
+				draw.add(drawCmd("rectFill", cell.orbX + run[0], StatOrb.TOP + y, run[1], 1, color));
+			}
+		}
 	}
 
 	private JsonArray stripDraw(List<CompactLayout.Cell> cells)

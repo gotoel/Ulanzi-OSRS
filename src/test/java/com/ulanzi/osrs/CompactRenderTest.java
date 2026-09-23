@@ -33,6 +33,111 @@ public class CompactRenderTest
 	}
 
 	@Test
+	public void everyOrbCommandStaysOnThePanelAndAboveTheStrip()
+	{
+		for (boolean icon : new boolean[] {false, true})
+		{
+			JsonArray draw = render(orbed(icon, 100, 100));
+			assertInBounds(draw, icon);
+			int orbRows = 0;
+			for (JsonElement element : draw)
+			{
+				JsonArray command = element.getAsJsonArray();
+				if (!"rectFill".equals(command.get(0).getAsString()))
+				{
+					continue;
+				}
+				int y = command.get(2).getAsInt();
+				if (y == CompactLayout.STRIP_ROW)
+				{
+					continue;
+				}
+				orbRows++;
+				// Row 6 is left clear, so an orb never touches the strip below it.
+				Assert.assertTrue("orb row " + y, y >= StatOrb.TOP && y < StatOrb.TOP + StatOrb.HEIGHT);
+				Assert.assertTrue("orb row " + y + " crowds the strip",
+					y < CompactLayout.STRIP_ROW - 1);
+			}
+			// The heart's seven runs and the diamond's six.
+			Assert.assertEquals(13, orbRows);
+		}
+	}
+
+	/**
+	 * The whole point of an orb: the same glyph, lit differently as the stat goes.
+	 */
+	@Test
+	public void anOrbEmptiesFromTheTopAsTheStatDrains()
+	{
+		Assert.assertEquals(StatOrb.HEIGHT, litOrbRows(100));
+		Assert.assertEquals(3, litOrbRows(50));
+		Assert.assertEquals(0, litOrbRows(0));
+		Assert.assertTrue(litOrbRows(83) > litOrbRows(50));
+	}
+
+	/**
+	 * What is left above the fill keeps the stat's own colour rather than the one it has
+	 * drained to, so an emptied hitpoints orb is a dim green heart and not a dim red one.
+	 */
+	@Test
+	public void theEmptyPartOfAnOrbHoldsTheStatsOwnColour()
+	{
+		List<CompactLayout.Cell> cells = new ArrayList<>();
+		cells.add(new CompactLayout.Cell(StatKind.HITPOINTS, StatStyle.VALUE, "5", 2, 5, -1,
+			StatKind.HITPOINTS.drained(5), StatKind.HITPOINTS.getIdentity(), StatOrb.HITPOINTS));
+		CompactLayout.place(cells, false);
+
+		String track = AwtrixClient.toHex(AwtrixClient.lift(
+			AwtrixClient.brighten(StatKind.HITPOINTS.getIdentity(), 0.22),
+			AwtrixClient.visibleFloor(AwtrixClient.DEFAULT_BRIGHTNESS)));
+		int held = 0;
+		for (JsonElement element : render(cells))
+		{
+			JsonArray command = element.getAsJsonArray();
+			if (track.equals(command.get(command.size() - 1).getAsString()))
+			{
+				held++;
+			}
+		}
+		Assert.assertTrue("nothing held the identity colour", held > 0);
+	}
+
+	/** How many of an orb's six rows are lit at their full colour. */
+	private static int litOrbRows(int percent)
+	{
+		JsonArray draw = render(orbed(false, percent, percent));
+		String lit = AwtrixClient.toHex(AwtrixClient.lift(StatKind.PRAYER.getIdentity(),
+			AwtrixClient.visibleFloor(AwtrixClient.DEFAULT_BRIGHTNESS)));
+		java.util.Set<Integer> rows = new java.util.HashSet<>();
+		for (JsonElement element : draw)
+		{
+			JsonArray command = element.getAsJsonArray();
+			if ("rectFill".equals(command.get(0).getAsString())
+				&& lit.equals(command.get(command.size() - 1).getAsString())
+				&& command.get(2).getAsInt() != CompactLayout.STRIP_ROW)
+			{
+				rows.add(command.get(2).getAsInt());
+			}
+		}
+		return rows.size();
+	}
+
+	/** Hitpoints and prayer with their orbs up, which is the page as it ships. */
+	private static List<CompactLayout.Cell> orbed(boolean icon, int hp, int prayer)
+	{
+		List<CompactLayout.Cell> cells = new ArrayList<>();
+		cells.add(new CompactLayout.Cell(StatKind.HITPOINTS, StatStyle.VALUE, "99", 2, hp, -1,
+			StatKind.HITPOINTS.drained(hp), StatKind.HITPOINTS.getIdentity(), StatOrb.HITPOINTS));
+		cells.add(new CompactLayout.Cell(StatKind.PRAYER, StatStyle.VALUE, "70", 2, prayer, -1,
+			StatKind.PRAYER.drained(prayer), StatKind.PRAYER.getIdentity(), StatOrb.PRAYER));
+		cells.add(new CompactLayout.Cell(StatKind.ENERGY, StatStyle.VALUE, "100", 3, 100, -1,
+			StatKind.ENERGY.drained(100), StatKind.ENERGY.getIdentity()));
+		CompactLayout.fit(cells, icon, StatKind.HITPOINTS);
+		CompactLayout.place(cells, icon);
+		return cells;
+	}
+
+	@Test
 	public void theStripReachesBothEdges()
 	{
 		List<CompactLayout.Cell> cells = page(false);
