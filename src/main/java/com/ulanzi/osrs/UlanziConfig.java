@@ -121,11 +121,13 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "brightness",
 		name = "Fixed brightness",
-		description = "Panel brightness to hold when Brightness is Fixed. The clock's own scale, not a percent.",
+		description = "Panel brightness to hold when Brightness is Fixed. The clock's own scale, not a percent. "
+			+ "Below about 8 the panel has barely a step of colour left per channel, and no amount of work here "
+			+ "brings a hue back, so that is as low as it goes.",
 		position = 5,
 		section = connectionSection
 	)
-	@Range(min = 1, max = 255)
+	@Range(min = 8, max = 255)
 	default int brightness()
 	{
 		return 120;

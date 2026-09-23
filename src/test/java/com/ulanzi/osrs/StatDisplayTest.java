@@ -159,4 +159,84 @@ public class StatDisplayTest
 		}
 		Assert.assertEquals(101, differences);
 	}
+
+	@Test
+	public void theFloorFollowsThePanelAndLeavesABrightOneAlone()
+	{
+		// Nothing moves at an ordinary brightness, so a lit room sees no change at all.
+		Assert.assertEquals(40, AwtrixClient.visibleFloor(255));
+		Assert.assertEquals(40, AwtrixClient.visibleFloor(AwtrixClient.DEFAULT_BRIGHTNESS));
+		Assert.assertEquals(40, AwtrixClient.visibleFloor(64));
+		Assert.assertTrue(AwtrixClient.visibleFloor(17) > 40);
+		Assert.assertTrue(AwtrixClient.visibleFloor(8) > AwtrixClient.visibleFloor(17));
+		// Never so far that the whole page flattens into one shade.
+		Assert.assertTrue(AwtrixClient.visibleFloor(1) <= 140);
+	}
+
+	/**
+	 * What the clock itself showed: at the bottom of its range a green sent at peak 180 was
+	 * still green, while the same green sent at peak 40 was not there at all. Whether a
+	 * pixel exists is decided by its brightest channel once the clock has scaled it, so the
+	 * faintest thing on the page has to be worked backwards from the level it runs at.
+	 */
+	@Test
+	public void theFaintestLitColourSurvivesThePanelItIsSentTo()
+	{
+		Color gradientLowStop = new Color(13, 40, 13);
+		for (int brightness : new int[] {8, 12, 17, 32, 64, 120, 255})
+		{
+			Color held = AwtrixClient.lift(gradientLowStop, AwtrixClient.visibleFloor(brightness));
+			int lands = peak(held) * (brightness + 1) / 256;
+			Assert.assertTrue("at brightness " + brightness + " it lands on " + lands, lands >= 3);
+		}
+	}
+
+	@Test
+	public void anIconGivesUpItsShadingOnlyOnceThePanelIsDim()
+	{
+		Assert.assertEquals(0.0, AwtrixClient.iconOpenAmount(AwtrixClient.DEFAULT_BRIGHTNESS), 0.001);
+		Assert.assertEquals(0.0, AwtrixClient.iconOpenAmount(64), 0.001);
+		Assert.assertEquals(1.0, AwtrixClient.iconOpenAmount(8), 0.001);
+		Assert.assertEquals(1.0, AwtrixClient.iconOpenAmount(1), 0.001);
+		Assert.assertTrue(AwtrixClient.iconOpenAmount(17) > 0.5);
+	}
+
+	/**
+	 * The tree trunk, which is the colour that was collapsing into the same red as
+	 * everything else warm on the panel.
+	 */
+	@Test
+	public void theTrunkKeepsMoreOfItsBrownOnADimPanel()
+	{
+		Color trunk = new Color(0x8B_5A_2B);
+		int brightness = 17;
+		int[] before = onPanel(trunk, brightness);
+		int[] after = onPanel(AwtrixClient.openUp(trunk, AwtrixClient.iconOpenAmount(brightness)), brightness);
+
+		// Blue is the first thing to go, and it is what separates a brown from a red.
+		Assert.assertTrue("blue " + after[2] + " is no better than " + before[2], after[2] > before[2]);
+		// And the gap red holds over green is what is left of the hue.
+		Assert.assertTrue(after[0] - after[1] > before[0] - before[1]);
+	}
+
+	@Test
+	public void openingUpHoldsTheHueAndLeavesBlackAlone()
+	{
+		Color opened = AwtrixClient.openUp(new Color(0x8B_5A_2B), 1.0);
+		Assert.assertEquals(255, peak(opened));
+		Assert.assertEquals(90.0 / 139.0, opened.getGreen() / (double) opened.getRed(), 0.02);
+		Assert.assertEquals(43.0 / 139.0, opened.getBlue() / (double) opened.getRed(), 0.02);
+
+		// An icon's background has to stay off, and white has nowhere to go.
+		Assert.assertEquals(Color.BLACK, AwtrixClient.openUp(Color.BLACK, 1.0));
+		Assert.assertEquals(Color.WHITE, AwtrixClient.openUp(Color.WHITE, 1.0));
+	}
+
+	private static int[] onPanel(Color color, int brightness)
+	{
+		return new int[] {
+			color.getRed() * (brightness + 1) / 256,
+			color.getGreen() * (brightness + 1) / 256,
+			color.getBlue() * (brightness + 1) / 256};
+	}
 }

@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.Base64;
 import java.util.function.Consumer;
@@ -75,6 +77,9 @@ public class AwtrixClient
 	private final AtomicReference<Brightness> savedBrightness = new AtomicReference<>();
 	private final AtomicBoolean brightnessSnapshotTried = new AtomicBoolean(false);
 	private final AtomicReference<String> appliedBrightness = new AtomicReference<>();
+	/** What the panel is actually running at, which is what every colour has to survive. */
+	private final AtomicInteger panelBrightness = new AtomicInteger(DEFAULT_BRIGHTNESS);
+	private final AtomicLong brightnessReadMs = new AtomicLong(0L);
 	private final AtomicReference<Boolean> reachable = new AtomicReference<>();
 	private volatile Consumer<String> messages = message -> { };
 	private volatile double pulse = 1.0;
@@ -105,6 +110,24 @@ public class AwtrixClient
 	 */
 	private static final int VISIBLE_FLOOR = 40;
 	private static final Color TRACK = new Color(48, 48, 48);
+	/**
+	 * The faintest a lit pixel may land on the panel itself.
+	 *
+	 * Measured rather than guessed: at a panel brightness of 1 a green sent at peak 180
+	 * still read as green while the same green sent at peak 40 was not there at all. What
+	 * decides whether a pixel exists is its brightest channel after the clock has scaled
+	 * it, so the floor has to be worked backwards from the level the panel is running at.
+	 */
+	private static final int MIN_PANEL_LIT = 6;
+	/** A floor past this would flatten the page into one shade, which helps nobody. */
+	private static final int MAX_FLOOR = 140;
+	/** Below this the panel has too few steps left to tell a trail from its track. */
+	private static final int LOW_LIGHT_LEVEL = 32;
+	/** Icons keep their own shading above this, and give it up for hue below it. */
+	private static final int ICON_OPEN_FROM = 64;
+	private static final int ICON_OPEN_FULL = 8;
+	static final int DEFAULT_BRIGHTNESS = 120;
+	private static final long BRIGHTNESS_POLL_MS = 30_000L;
 
 	@Inject
 	AwtrixClient(OkHttpClient httpClient, UlanziConfig config, Gson gson)
@@ -137,7 +160,73 @@ public class AwtrixClient
 
 	private String hex(Color color)
 	{
-		return toHex(lift(brighten(color, pulse), VISIBLE_FLOOR));
+		return toHex(lift(brighten(color, pulse), visibleFloor(panelBrightness.get())));
+	}
+
+	/**
+	 * How far a lit colour has to be held up for the level the panel is running at.
+	 *
+	 * The clock scales by roughly (brightness + 1) / 256, so the value that arrives as
+	 * {@link #MIN_PANEL_LIT} is that much larger the dimmer the panel is. At an ordinary
+	 * brightness this is below the flat floor and nothing changes at all.
+	 */
+	static int visibleFloor(int brightness)
+	{
+		int level = Math.max(1, Math.min(255, brightness));
+		int needed = MIN_PANEL_LIT * 256 / (level + 1);
+		return Math.max(VISIBLE_FLOOR, Math.min(MAX_FLOOR, needed));
+	}
+
+	/**
+	 * How much of an icon's shading to trade away for hue, 0 to 1.
+	 *
+	 * An icon's colours are its identity, and identity is carried by the ratio between the
+	 * channels. The dimmer the panel, the fewer steps are left to hold that ratio in, so a
+	 * tree trunk's brown flattens into the same red as everything else warm. Opening the
+	 * colour up to full value hands those ratios more room: at a brightness of 17 the trunk
+	 * goes from landing on (9, 6, 3) to landing on (16, 10, 5).
+	 */
+	static double iconOpenAmount(int brightness)
+	{
+		int level = Math.max(1, Math.min(255, brightness));
+		if (level >= ICON_OPEN_FROM)
+		{
+			return 0.0;
+		}
+		if (level <= ICON_OPEN_FULL)
+		{
+			return 1.0;
+		}
+		return (ICON_OPEN_FROM - level) / (double) (ICON_OPEN_FROM - ICON_OPEN_FULL);
+	}
+
+	/**
+	 * Scales a colour towards full value, holding its hue. At 1 its brightest channel ends
+	 * at 255. Black is left alone, so an icon's background stays off.
+	 */
+	static Color openUp(Color color, double amount)
+	{
+		int peak = Math.max(color.getRed(), Math.max(color.getGreen(), color.getBlue()));
+		if (peak == 0 || peak >= 255 || amount <= 0)
+		{
+			return color;
+		}
+		double scale = 1.0 + Math.min(1.0, amount) * (255.0 / peak - 1.0);
+		return new Color(channel(color.getRed(), scale), channel(color.getGreen(), scale),
+			channel(color.getBlue(), scale));
+	}
+
+	/**
+	 * Too few steps left to show a trail behind a reading as well as the track under it.
+	 */
+	private boolean lowLight()
+	{
+		return panelBrightness.get() < LOW_LIGHT_LEVEL;
+	}
+
+	int panelBrightness()
+	{
+		return panelBrightness.get();
 	}
 
 	/**
@@ -191,19 +280,27 @@ public class AwtrixClient
 	private String pulseIcon(String icon)
 	{
 		double factor = pulse;
-		if (icon == null || icon.isEmpty() || factor == 1.0)
+		double open = iconOpenAmount(panelBrightness.get());
+		if (icon == null || icon.isEmpty() || (factor == 1.0 && open <= 0))
 		{
 			return icon;
 		}
 		int step = (int) Math.round(factor * 100);
+		int opened = (int) Math.round(open * 100);
 		if (pulseIcons.size() > PULSE_ICON_CACHE)
 		{
 			pulseIcons.clear();
 		}
-		return pulseIcons.computeIfAbsent(step + ":" + icon, key -> brightenIcon(icon, step / 100.0));
+		return pulseIcons.computeIfAbsent(step + "/" + opened + ":" + icon,
+			key -> brightenIcon(icon, step / 100.0, opened / 100.0));
 	}
 
 	static String brightenIcon(String icon, double factor)
+	{
+		return brightenIcon(icon, factor, 0.0);
+	}
+
+	static String brightenIcon(String icon, double factor, double open)
 	{
 		try
 		{
@@ -217,7 +314,7 @@ public class AwtrixClient
 			{
 				for (int x = 0; x < image.getWidth(); x++)
 				{
-					lit.setRGB(x, y, brighten(new Color(image.getRGB(x, y)), factor).getRGB());
+					lit.setRGB(x, y, openUp(brighten(new Color(image.getRGB(x, y)), factor), open).getRGB());
 				}
 			}
 			ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -854,7 +951,9 @@ public class AwtrixClient
 		draw.add(drawCmd("rectFill", cell.stripX, row, width, 1, hex(brighten(color, TRACK_LEVEL))));
 
 		// What the stat was a moment ago, left behind so a drop is visible as it happens.
-		if (cell.ghostPercent > cell.percent)
+		// A dim panel has too few steps left to tell the trail from the track it sits on,
+		// so below that it is dropped rather than left to smear the two together.
+		if (cell.ghostPercent > cell.percent && !lowLight())
 		{
 			int ghost = barFullPixels(cell.ghostPercent, width);
 			int from = barFullPixels(cell.percent, width);
@@ -1040,8 +1139,11 @@ public class AwtrixClient
 		if (config.brightnessMode() != BrightnessMode.FIXED)
 		{
 			restoreBrightness();
+			readPanelBrightness();
 			return;
 		}
+
+		panelBrightness.set(Math.max(1, Math.min(255, config.brightness())));
 
 		JsonObject wanted = new JsonObject();
 		wanted.addProperty("autoBrightness", false);
@@ -1075,6 +1177,39 @@ public class AwtrixClient
 				}
 			}
 			putBrightness(json);
+		});
+	}
+
+	/**
+	 * What the clock is running at when it is not ours to set. Asked for now and then
+	 * rather than every tick, since it only moves when the room does.
+	 */
+	private void readPanelBrightness()
+	{
+		long now = System.currentTimeMillis();
+		long last = brightnessReadMs.get();
+		if (now - last < BRIGHTNESS_POLL_MS || !brightnessReadMs.compareAndSet(last, now))
+		{
+			return;
+		}
+		send("GET", "/api/v1/settings", null, false, result ->
+		{
+			if (!result.ok || result.body == null)
+			{
+				return;
+			}
+			try
+			{
+				JsonObject settings = gson.fromJson(result.body, JsonObject.class);
+				if (settings != null)
+				{
+					panelBrightness.set(Math.max(1, Math.min(255, parseBrightness(settings).level)));
+				}
+			}
+			catch (JsonParseException ex)
+			{
+				log.debug("Could not read the clock's brightness", ex);
+			}
 		});
 	}
 
