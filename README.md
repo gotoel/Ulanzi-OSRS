@@ -62,6 +62,14 @@ In the plugin config:
 2. Toggle **Test connection**. The clock should flash a green `OK`, and the result is posted in the game chat.
 3. Enable the AFK and stats options you want.
 
+**Minimum brightness** never lets the panel sit below it, whoever set it there, and is on at
+17 by default. Under about that the clock has so few steps of colour left that a tree trunk's
+brown comes out the same red as everything else warm and the thinner bars stop being drawn at
+all, and the firmware has no floor of its own under its light sensor. If the sensor is what
+took the panel under, the plugin holds it up and hands the clock back its own brightness once
+the room is light again; if someone set it there by hand, it is held, which is the point. 0
+turns it off.
+
 **Brightness** decides who sets the panel level. *Leave to the clock* follows its light
 sensor, which takes a dark room far enough down that the dimmer half of a page — bar
 tracks, the gradient's low end, the resting dim of a pulse — falls under what the LEDs can

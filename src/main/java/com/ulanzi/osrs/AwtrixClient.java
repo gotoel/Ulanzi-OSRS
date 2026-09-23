@@ -80,6 +80,11 @@ public class AwtrixClient
 	/** What the panel is actually running at, which is what every colour has to survive. */
 	private final AtomicInteger panelBrightness = new AtomicInteger(DEFAULT_BRIGHTNESS);
 	private final AtomicLong brightnessReadMs = new AtomicLong(0L);
+	/** The clock's own reading of the room, which stays readable even with auto off. */
+	private final AtomicInteger lightLevel = new AtomicInteger(-1);
+	/** Set while we are holding the panel up off the floor the config asks for. */
+	private final AtomicBoolean holdingFloor = new AtomicBoolean(false);
+	private final AtomicInteger releaseLight = new AtomicInteger(Integer.MAX_VALUE);
 	private final AtomicReference<Boolean> reachable = new AtomicReference<>();
 	private volatile Consumer<String> messages = message -> { };
 	private volatile double pulse = 1.0;
@@ -127,7 +132,12 @@ public class AwtrixClient
 	private static final int ICON_OPEN_FROM = 64;
 	private static final int ICON_OPEN_FULL = 8;
 	static final int DEFAULT_BRIGHTNESS = 120;
-	private static final long BRIGHTNESS_POLL_MS = 30_000L;
+	private static final long BRIGHTNESS_POLL_MS = 15_000L;
+	/**
+	 * How much the room has to have brightened before the clock is trusted with its own
+	 * brightness again, so a panel sitting near the floor does not hand back and forth.
+	 */
+	private static final int LIGHT_RELEASE_MARGIN = 3;
 
 	@Inject
 	AwtrixClient(OkHttpClient httpClient, UlanziConfig config, Gson gson)
@@ -1136,18 +1146,85 @@ public class AwtrixClient
 	 */
 	void applyBrightness()
 	{
+		readPanelState();
+		int floor = Math.max(0, Math.min(255, config.minBrightness()));
+
 		if (config.brightnessMode() != BrightnessMode.FIXED)
 		{
-			restoreBrightness();
-			readPanelBrightness();
+			holdFloor(floor);
 			return;
 		}
 
-		panelBrightness.set(Math.max(1, Math.min(255, config.brightness())));
+		int level = Math.max(1, Math.min(255, Math.max(config.brightness(), floor)));
+		panelBrightness.set(level);
+		pin(level);
+	}
 
+	/**
+	 * Steps in only when the clock has taken itself under the floor.
+	 *
+	 * Under about 17 the panel has so few steps of colour left that hues collapse into one
+	 * another and the faintest parts of a page are not drawn at all, and the firmware has no
+	 * floor of its own under its light sensor. If the sensor is what took it down there, the
+	 * room brightening again is what hands the clock back its own brightness; if someone set
+	 * it there by hand, holding the floor is the whole point and it is held.
+	 */
+	private void holdFloor(int floor)
+	{
+		if (floor <= 0)
+		{
+			restoreBrightness();
+			holdingFloor.set(false);
+			return;
+		}
+
+		if (holdingFloor.get())
+		{
+			Brightness saved = savedBrightness.get();
+			boolean fromSensor = saved != null && saved.automatic;
+			if (shouldRelease(fromSensor, lightLevel.get(), releaseLight.get()))
+			{
+				restoreBrightness();
+			}
+			return;
+		}
+
+		if (!shouldHoldFloor(panelBrightness.get(), floor))
+		{
+			// Also hands back a level pinned while the mode was Fixed, so switching back
+			// to the clock's own brightness does not leave it stuck where we put it.
+			restoreBrightness();
+			return;
+		}
+		releaseLight.set(Math.max(0, lightLevel.get()) + LIGHT_RELEASE_MARGIN);
+		holdingFloor.set(true);
+		pin(floor);
+	}
+
+	/**
+	 * The clock is under the floor and something has to hold it up. A level of zero means
+	 * nothing has been read back yet, which is not the same as a dark panel.
+	 */
+	static boolean shouldHoldFloor(int liveBrightness, int floor)
+	{
+		return floor > 0 && liveBrightness > 0 && liveBrightness < floor;
+	}
+
+	/**
+	 * Only a panel taken down by the light sensor is handed back, and only once the room has
+	 * brightened past where it was when we stepped in. A level someone chose by hand is not
+	 * given back, since holding it up is the whole point of asking for a floor.
+	 */
+	static boolean shouldRelease(boolean fromSensor, int light, int releaseAt)
+	{
+		return fromSensor && light >= releaseAt;
+	}
+
+	private void pin(int level)
+	{
 		JsonObject wanted = new JsonObject();
 		wanted.addProperty("autoBrightness", false);
-		wanted.addProperty("brightness", Math.max(1, Math.min(255, config.brightness())));
+		wanted.addProperty("brightness", level);
 		String json = wanted.toString();
 		if (json.equals(appliedBrightness.get()))
 		{
@@ -1181,10 +1258,14 @@ public class AwtrixClient
 	}
 
 	/**
-	 * What the clock is running at when it is not ours to set. Asked for now and then
-	 * rather than every tick, since it only moves when the room does.
+	 * What the panel is actually running at, and what the clock makes of the room.
+	 *
+	 * This comes from the device rather than the settings, because the settings only hold
+	 * what someone asked for: with the light sensor driving, the level that matters is the
+	 * one the clock arrived at. The reading of the room survives the sensor being switched
+	 * off, which is what lets the floor be handed back when the lights come on.
 	 */
-	private void readPanelBrightness()
+	private void readPanelState()
 	{
 		long now = System.currentTimeMillis();
 		long last = brightnessReadMs.get();
@@ -1192,7 +1273,7 @@ public class AwtrixClient
 		{
 			return;
 		}
-		send("GET", "/api/v1/settings", null, false, result ->
+		send("GET", "/api/v1/device", null, false, result ->
 		{
 			if (!result.ok || result.body == null)
 			{
@@ -1200,15 +1281,25 @@ public class AwtrixClient
 			}
 			try
 			{
-				JsonObject settings = gson.fromJson(result.body, JsonObject.class);
-				if (settings != null)
+				JsonObject device = gson.fromJson(result.body, JsonObject.class);
+				if (device == null)
 				{
-					panelBrightness.set(Math.max(1, Math.min(255, parseBrightness(settings).level)));
+					return;
+				}
+				JsonElement level = device.get("brightness");
+				if (level != null && level.isJsonPrimitive())
+				{
+					panelBrightness.set(Math.max(1, Math.min(255, level.getAsInt())));
+				}
+				JsonElement light = device.get("lightLevel");
+				if (light != null && light.isJsonPrimitive())
+				{
+					lightLevel.set(light.getAsInt());
 				}
 			}
 			catch (JsonParseException ex)
 			{
-				log.debug("Could not read the clock's brightness", ex);
+				log.debug("Could not read the clock's state", ex);
 			}
 		});
 	}
@@ -1233,6 +1324,8 @@ public class AwtrixClient
 	private void restoreBrightness()
 	{
 		brightnessSnapshotTried.set(false);
+		holdingFloor.set(false);
+		releaseLight.set(Integer.MAX_VALUE);
 		if (appliedBrightness.getAndSet(null) == null)
 		{
 			return;

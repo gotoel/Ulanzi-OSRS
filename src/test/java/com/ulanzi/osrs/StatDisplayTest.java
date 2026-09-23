@@ -239,4 +239,26 @@ public class StatDisplayTest
 			color.getGreen() * (brightness + 1) / 256,
 			color.getBlue() * (brightness + 1) / 256};
 	}
+
+	@Test
+	public void theFloorIsHeldOnlyWhenTheClockIsUnderIt()
+	{
+		Assert.assertTrue(AwtrixClient.shouldHoldFloor(8, 17));
+		Assert.assertFalse(AwtrixClient.shouldHoldFloor(17, 17));
+		Assert.assertFalse(AwtrixClient.shouldHoldFloor(120, 17));
+		// Switched off.
+		Assert.assertFalse(AwtrixClient.shouldHoldFloor(8, 0));
+		// Nothing read back yet is not the same as a dark panel.
+		Assert.assertFalse(AwtrixClient.shouldHoldFloor(0, 17));
+	}
+
+	@Test
+	public void onlyASensorDrivenPanelIsHandedBack()
+	{
+		// The room has brightened past where it was when the floor was taken up.
+		Assert.assertTrue(AwtrixClient.shouldRelease(true, 5, 3));
+		Assert.assertFalse(AwtrixClient.shouldRelease(true, 2, 3));
+		// A level someone set by hand is held, which is the point of asking for a floor.
+		Assert.assertFalse(AwtrixClient.shouldRelease(false, 500, 3));
+	}
 }

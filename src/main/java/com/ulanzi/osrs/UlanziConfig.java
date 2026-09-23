@@ -123,7 +123,7 @@ public interface UlanziConfig extends Config
 		name = "Fixed brightness",
 		description = "Panel brightness to hold when Brightness is Fixed. The clock's own scale, not a percent. "
 			+ "Below about 8 the panel has barely a step of colour left per channel, and no amount of work here "
-			+ "brings a hue back, so that is as low as it goes.",
+			+ "brings a hue back, so that is as low as it goes. Minimum brightness still wins over this.",
 		position = 5,
 		section = connectionSection
 	)
@@ -131,6 +131,22 @@ public interface UlanziConfig extends Config
 	default int brightness()
 	{
 		return 120;
+	}
+
+	@ConfigItem(
+		keyName = "minBrightness",
+		name = "Minimum brightness",
+		description = "Never let the panel sit below this, whoever set it. Under about 17 the clock has so few steps "
+			+ "of colour left that a tree trunk's brown comes out the same red as everything else warm and the thinner "
+			+ "bars stop being drawn at all. If the clock's own light sensor takes it under, the plugin holds it here "
+			+ "and hands control back once the room is light again. 0 turns this off.",
+		position = 6,
+		section = connectionSection
+	)
+	@Range(min = 0, max = 255)
+	default int minBrightness()
+	{
+		return 17;
 	}
 
 	@ConfigItem(
