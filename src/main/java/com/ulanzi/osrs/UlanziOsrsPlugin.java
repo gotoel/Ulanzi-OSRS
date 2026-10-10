@@ -26,6 +26,7 @@ import net.runelite.api.Player;
 import net.runelite.api.Skill;
 import net.runelite.api.VarPlayer;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.events.GameObjectDespawned;
 import net.runelite.api.events.GameObjectSpawned;
@@ -36,7 +37,6 @@ import net.runelite.api.events.NpcDespawned;
 import net.runelite.api.events.NpcSpawned;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.chat.ChatColorType;
 import net.runelite.client.chat.ChatMessageBuilder;
 import net.runelite.client.chat.ChatMessageManager;
@@ -2711,14 +2711,14 @@ public class UlanziOsrsPlugin extends Plugin
 
 	private boolean isDialogOpen()
 	{
-		return visible(WidgetInfo.DIALOG_NPC_TEXT)
-			|| visible(WidgetInfo.DIALOG_PLAYER_TEXT)
-			|| visible(WidgetInfo.DIALOG_OPTION_OPTIONS);
+		return visible(InterfaceID.ChatLeft.TEXT)
+			|| visible(InterfaceID.ChatRight.TEXT)
+			|| visible(InterfaceID.Chatmenu.OPTIONS);
 	}
 
-	private boolean visible(WidgetInfo info)
+	private boolean visible(int componentId)
 	{
-		Widget widget = client.getWidget(info);
+		Widget widget = client.getWidget(componentId);
 		return widget != null && !widget.isHidden();
 	}
 
