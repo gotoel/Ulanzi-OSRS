@@ -1,5 +1,10 @@
 package com.ulanzi.osrs;
 
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * Decides which skilling activity is current.
  * A mapped animation wins immediately. After it stops, the same activity can
@@ -12,10 +17,15 @@ final class SkillActivityTracker
 {
 	static final long UNKNOWN_ANIM_MS = 2_000L;
 
+	/** How long a skill counts as still being trained after its last XP. */
+	static final long TRAINING_MS = 30_000L;
+
 	private SkillActivity current;
 	private long lastConfirmMs;
 	private SkillActivity lastXpActivity;
 	private long lastXpMs;
+	/** Every skill paying XP at the moment, so several at once can take turns. */
+	private final Map<SkillActivity, Long> trainingXpMs = new EnumMap<>(SkillActivity.class);
 
 	void reset()
 	{
@@ -23,6 +33,7 @@ final class SkillActivityTracker
 		lastConfirmMs = 0L;
 		lastXpActivity = null;
 		lastXpMs = 0L;
+		trainingXpMs.clear();
 	}
 
 	void onXp(SkillActivity activity, long nowMs)
@@ -33,8 +44,26 @@ final class SkillActivityTracker
 		}
 		lastXpActivity = activity;
 		lastXpMs = nowMs;
+		trainingXpMs.put(activity, nowMs);
 		current = activity;
 		lastConfirmMs = nowMs;
+	}
+
+	/**
+	 * The skills still paying XP, in a fixed order so a rotation between them keeps its
+	 * place as the drops land rather than reshuffling under whoever paid last.
+	 */
+	List<SkillActivity> training(long nowMs, long windowMs)
+	{
+		List<SkillActivity> training = new ArrayList<>();
+		for (Map.Entry<SkillActivity, Long> entry : trainingXpMs.entrySet())
+		{
+			if (nowMs - entry.getValue() < windowMs)
+			{
+				training.add(entry.getKey());
+			}
+		}
+		return training;
 	}
 
 	SkillActivity onAnimation(SkillActivity fromAnimation, int animationId, long nowMs)

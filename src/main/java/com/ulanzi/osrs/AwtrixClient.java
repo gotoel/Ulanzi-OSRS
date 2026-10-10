@@ -47,6 +47,8 @@ public class AwtrixClient
 	static final String NOTIF_AFK = "osrs-afk";
 	static final String NOTIF_LOW_HP = "osrs-low-hp";
 	static final String NOTIF_LOW_PRAY = "osrs-low-pray";
+	static final String NOTIF_SPEC_READY = "osrs-spec";
+	static final String NOTIF_FORESTRY = "osrs-forestry";
 	static final String NOTIF_TEST = "osrs-test";
 	static final String NOTIF_XP_DROP = "osrs-xp";
 	static final long LEVEL_UP_MS = 5_000L;
@@ -61,7 +63,10 @@ public class AwtrixClient
 	private static final String AFK_RTTTL = "afk:d=4,o=5,b=160:c6,p,c6";
 	private static final String HP_RTTTL = "lowhp:d=16,o=6,b=200:c,e,g,c7";
 	private static final String PRAY_RTTTL = "lowpray:d=8,o=5,b=140:e,c,e,c";
+	/** Rising, where the warnings fall: the one alert that is good news. */
+	private static final String SPEC_RTTTL = "spec:d=16,o=5,b=180:g,c6,e6,8g6";
 	private static final String LEVEL_RTTTL = "levelup:d=8,o=5,b=180:c,e,g,4c6,p,g,2c6";
+	private static final String FORESTRY_RTTTL = "forestry:d=16,o=6,b=180:e,g,b,8e7,p,8b";
 
 	private final OkHttpClient httpClient;
 	private final UlanziConfig config;
@@ -87,6 +92,7 @@ public class AwtrixClient
 	private final AtomicInteger releaseLight = new AtomicInteger(Integer.MAX_VALUE);
 	private final AtomicReference<Boolean> reachable = new AtomicReference<>();
 	private volatile Consumer<String> messages = message -> { };
+	private volatile Consumer<String> statuses = status -> { };
 	private volatile double pulse = 1.0;
 	private final Map<String, String> pulseIcons = new ConcurrentHashMap<>();
 
@@ -136,6 +142,12 @@ public class AwtrixClient
 	 * brightness again, so a panel sitting near the floor does not hand back and forth.
 	 */
 	private static final int LIGHT_RELEASE_MARGIN = 3;
+	/**
+	 * The lowest level worth pinning the panel at. Below this there is barely a step of
+	 * colour left per channel, and nothing done here brings a hue back, so a brightness
+	 * asked for under it is raised rather than honoured.
+	 */
+	static final int MIN_FIXED_BRIGHTNESS = 8;
 
 	@Inject
 	AwtrixClient(OkHttpClient httpClient, UlanziConfig config, Gson gson)
@@ -152,6 +164,22 @@ public class AwtrixClient
 	{
 		messages = sink == null ? message -> { } : sink;
 		reachable.set(null);
+	}
+
+	/**
+	 * Where the one-line connection status goes, which is the settings panel rather than
+	 * the chat log: it is the answer to a question asked there, so it belongs there.
+	 * Unlike the chat messages it is not something you have to switch on. Called from
+	 * OkHttp threads.
+	 */
+	void setStatusSink(Consumer<String> sink)
+	{
+		statuses = sink == null ? status -> { } : sink;
+	}
+
+	private void status(String text)
+	{
+		statuses.accept(text);
 	}
 
 	/**
@@ -352,8 +380,10 @@ public class AwtrixClient
 		if (baseUrl() == null)
 		{
 			messages.accept("Set the clock address first.");
+			status("No clock address set.");
 			return;
 		}
+		status("Testing...");
 
 		JsonObject body = new JsonObject();
 		body.addProperty("name", NOTIF_TEST);
@@ -374,15 +404,18 @@ public class AwtrixClient
 				{
 					String name = device.ok ? hostname(device.body) : null;
 					messages.accept(name == null ? "Connected to the clock." : "Connected to " + name + ".");
+					status(name == null ? "Connected." : "Connected to " + name + ".");
 				});
 			}
 			else if (result.reachable)
 			{
 				messages.accept("The clock answered with " + result.problem + ". Is it running AWTRIX NG?");
+				status("Answered with " + result.problem + " — is it running AWTRIX NG?");
 			}
 			else
 			{
 				messages.accept("Couldn't reach the clock: " + result.problem + ".");
+				status("No answer: " + result.problem + ".");
 			}
 		});
 	}
@@ -601,9 +634,10 @@ public class AwtrixClient
 		{
 			body.addProperty("backgroundColor", hexBackground(config.afkBackgroundColor()));
 			body.addProperty("textColor", hex(config.afkTextColor()));
-			if (config.afkBlink())
+			int blinkMs = config.afkBlinkMs();
+			if (blinkMs > 0)
 			{
-				body.addProperty("textBlinkMs", config.afkBlinkMs());
+				body.addProperty("textBlinkMs", blinkMs);
 			}
 		}
 	}
@@ -628,6 +662,11 @@ public class AwtrixClient
 	void beepLowPrayer()
 	{
 		beep(PRAY_RTTTL);
+	}
+
+	void beepSpecReady()
+	{
+		beep(SPEC_RTTTL);
 	}
 
 	void beepAfk()
@@ -757,10 +796,22 @@ public class AwtrixClient
 			flash, beep, hold, PRAY_RTTTL);
 	}
 
+	/**
+	 * The special attack bar back up to where it can be spent. Unlike the two warnings
+	 * this is a moment rather than a state: it is shown for a few seconds and goes,
+	 * because the bar then stays full until you spend it and there is nothing left to say.
+	 */
+	void showSpecReadyAlert(int spec, boolean flash, boolean beep, boolean hold)
+	{
+		showThresholdAlert(NOTIF_SPEC_READY, "SPEC " + spec, new Color(0xFF, 0x8C, 0x00), new Color(40, 20, 0),
+			flash, beep, hold, SPEC_RTTTL);
+	}
+
 	void dismissLowAlerts()
 	{
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_LOW_HP, null, null);
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_LOW_PRAY, null, null);
+		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_SPEC_READY, null, null);
 	}
 
 	void dismissLowHp()
@@ -771,6 +822,83 @@ public class AwtrixClient
 	void dismissLowPrayer()
 	{
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_LOW_PRAY, null, null);
+	}
+
+	void dismissSpecReady()
+	{
+		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_SPEC_READY, null, null);
+	}
+
+	/**
+	 * A forestry event, held on the panel with its name over the animation it is drawn in.
+	 *
+	 * Redrawn a frame at a time from {@link ForestryAnimation}, the same way the AFK eyes
+	 * are: the clock is only ever sent one page, and the animation is that page changing
+	 * under the name rather than anything the firmware is asked to run for itself.
+	 */
+	void showForestryAlert(ForestryEvent event, ForestryEffect effect, long elapsedMs)
+	{
+		JsonObject body = new JsonObject();
+		body.addProperty("name", NOTIF_FORESTRY);
+		body.addProperty("hold", true);
+		body.addProperty("stack", false);
+		body.addProperty("wakeup", true);
+		applyForestryVisuals(body, event, effect, elapsedMs);
+		enqueue("POST", "/api/v1/notifications", body.toString(), null);
+	}
+
+	void beepForestry()
+	{
+		beep(FORESTRY_RTTTL);
+	}
+
+	/**
+	 * The same page on the stats slot, for anyone who would rather an event did not take
+	 * the panel away from what is already on it.
+	 */
+	void pushForestryOnStats(ForestryEvent event, ForestryEffect effect, long elapsedMs)
+	{
+		JsonObject body = baseStatsApp();
+		applyForestryVisuals(body, event, effect, elapsedMs);
+		putStats(body);
+	}
+
+	private void applyForestryVisuals(JsonObject body, ForestryEvent event, ForestryEffect effect, long elapsedMs)
+	{
+		body.addProperty("text", event.label());
+		body.addProperty("font", "small");
+		body.addProperty("textCase", "asTyped");
+		body.addProperty("textCenter", true);
+		body.addProperty("backgroundColor", "#000000");
+		body.add("scroll", scrollStatic());
+
+		if (!effect.isAnimated())
+		{
+			body.addProperty("textColor", hex(event.color()));
+			body.addProperty("textBlinkMs", 350);
+			return;
+		}
+
+		// White over the event's own colour: the animation is what says which event this
+		// is from across a room, and the name has to stay readable through it.
+		body.addProperty("textColor", hex(Color.WHITE));
+		body.addProperty("textInFront", true);
+		body.add("draw", forestryDraw(effect, event.color(), elapsedMs));
+	}
+
+	JsonArray forestryDraw(ForestryEffect effect, Color color, long elapsedMs)
+	{
+		JsonArray draw = new JsonArray();
+		for (ForestryAnimation.Dot dot : ForestryAnimation.frame(effect, color, elapsedMs))
+		{
+			draw.add(drawCmd("pixel", dot.x, dot.y, hex(dot.color)));
+		}
+		return draw;
+	}
+
+	void dismissForestry()
+	{
+		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_FORESTRY, null, null);
 	}
 
 	private void showThresholdAlert(String name, String text, Color textColor, Color background,
@@ -1057,7 +1185,13 @@ public class AwtrixClient
 	/**
 	 * Text beside the activity icon, with the bottom row painted from a gradient up to the percent.
 	 */
-	void pushSkillProgress(List<TextFragment> fragments, int progressPercent, List<Color> gradient, String activityIcon)
+	/**
+	 * The skill progress page, with whatever stats were asked for standing as columns down
+	 * the right edge. The words are centred by the firmware, so the columns are paid for by
+	 * shifting them left rather than by narrowing an area we do not control.
+	 */
+	void pushSkillProgress(List<TextFragment> fragments, int progressPercent, List<Color> gradient,
+		String activityIcon, List<CompactLayout.Cell> edgeBars)
 	{
 		JsonObject body = baseStatsApp();
 		body.addProperty("font", "small");
@@ -1065,6 +1199,11 @@ public class AwtrixClient
 		body.add("scroll", scrollStatic());
 		applyActivityIcon(body, activityIcon);
 		body.add("text", fragmentsJson(fragments));
+		int columns = edgeBars == null ? 0 : edgeDraw(edgeBars, body);
+		if (columns > 0)
+		{
+			body.addProperty("textOffsetX", -(CompactLayout.edgeReserve(columns) / 2));
+		}
 		if (progressPercent >= 0)
 		{
 			JsonArray palette = new JsonArray();
@@ -1079,6 +1218,52 @@ public class AwtrixClient
 			body.addProperty("textInFront", true);
 		}
 		putStats(body);
+	}
+
+	/**
+	 * One column per stat at the right edge, filling from the bottom the way the bottom
+	 * strip fills from the left, and tracked in the colour the stat is known by so an
+	 * empty column still says whose it is.
+	 */
+	private int edgeDraw(List<CompactLayout.Cell> cells, JsonObject body)
+	{
+		JsonArray draw = new JsonArray();
+		int columns = 0;
+		for (CompactLayout.Cell cell : cells)
+		{
+			if (!cell.showsBar() || cell.edgeX < 0)
+			{
+				continue;
+			}
+			appendEdgeBar(draw, cell);
+			columns++;
+		}
+		if (columns > 0)
+		{
+			body.add("draw", draw);
+		}
+		return columns;
+	}
+
+	private void appendEdgeBar(JsonArray draw, CompactLayout.Cell cell)
+	{
+		int height = CompactLayout.EDGE_HEIGHT;
+		int top = CompactLayout.EDGE_TOP;
+		Color color = cell.color == null ? Color.WHITE : cell.color;
+		Color track = cell.identity == null ? color : cell.identity;
+		draw.add(drawCmd("rectFill", cell.edgeX, top, 1, height, hex(brighten(track, TRACK_LEVEL))));
+
+		int full = barFullPixels(cell.percent, height);
+		if (full > 0)
+		{
+			draw.add(drawCmd("rectFill", cell.edgeX, top + height - full, 1, full, hex(color)));
+		}
+		int partial = barPartialPercent(cell.percent, height);
+		if (partial > 0 && full < height)
+		{
+			draw.add(drawCmd("pixel", cell.edgeX, top + height - full - 1,
+				hex(brighten(color, partial / 100.0))));
+		}
 	}
 
 	private JsonArray fragmentsJson(List<TextFragment> fragments)
@@ -1108,6 +1293,8 @@ public class AwtrixClient
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_AFK, null, null);
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_LOW_HP, null, null);
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_LOW_PRAY, null, null);
+		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_SPEC_READY, null, null);
+		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_FORESTRY, null, null);
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_XP_DROP, null, null);
 		enqueue("DELETE", "/api/v1/apps/" + APP_STATS, null, null);
 		restoreLoop();
@@ -1186,14 +1373,17 @@ public class AwtrixClient
 	{
 		readPanelState();
 		int floor = Math.max(0, Math.min(255, config.minBrightness()));
+		int wanted = Math.max(0, Math.min(255, config.brightness()));
 
-		if (config.brightnessMode() != BrightnessMode.FIXED)
+		// Zero is the clock's own business, which is the default and what the minimum
+		// below exists to put a floor under.
+		if (wanted <= 0)
 		{
 			holdFloor(floor);
 			return;
 		}
 
-		int level = Math.max(1, Math.min(255, Math.max(config.brightness(), floor)));
+		int level = Math.min(255, Math.max(MIN_FIXED_BRIGHTNESS, Math.max(wanted, floor)));
 		panelBrightness.set(level);
 		pin(level);
 	}
@@ -1527,6 +1717,7 @@ public class AwtrixClient
 		if (base == null)
 		{
 			log.debug("AWTRIX request skipped, no clock address: {} {}", method, path);
+			status("No clock address set.");
 			if (done != null)
 			{
 				done.accept(Result.failed("no clock address"));
@@ -1596,13 +1787,20 @@ public class AwtrixClient
 			private void finish(Result result)
 			{
 				Boolean before = reachable.getAndSet(result.reachable);
-				if (!test && before != null && before != result.reachable)
+				// The status line always says where things stand; the chat messages are
+				// the opt-in on top of it, so a test does not overwrite its own answer.
+				if (!test && (before == null || before != result.reachable))
+				{
+					status(result.reachable ? "Connected." : "No answer: " + result.problem + ".");
+				}
+				boolean announce = !test && config.connectionMessages();
+				if (announce && before != null && before != result.reachable)
 				{
 					messages.accept(result.reachable
 						? "Connected to the clock again."
 						: "Lost the clock: " + result.problem + ".");
 				}
-				else if (!test && before == null && !result.reachable)
+				else if (announce && before == null && !result.reachable)
 				{
 					messages.accept("Couldn't reach the clock: " + result.problem + ".");
 				}

@@ -42,6 +42,14 @@ final class CompactLayout
 	static final int TEXT_TOP = 1;
 	/** The bar strip, and for the focus layout the only row the large font leaves free. */
 	static final int STRIP_ROW = 7;
+	/**
+	 * The skill progress page keeps its stats as columns down the right edge instead of a
+	 * strip: the bottom row there is already the bar toward the next level. Each column is
+	 * a pixel wide with a pixel between, and they fill from the bottom the way the strip
+	 * fills from the left.
+	 */
+	static final int EDGE_TOP = 0;
+	static final int EDGE_HEIGHT = 7;
 	/** Two blank columns between values: the slot's own trailing column, and this. */
 	private static final int GAP = 1;
 	/** A blank column between an orb and the values, on top of the slot's own. */
@@ -75,6 +83,7 @@ final class CompactLayout
 		int stripX = -1;
 		int stripWidth;
 		int orbX = -1;
+		int edgeX = -1;
 
 		Cell(StatKind kind, StatStyle style, String text, int digits, int percent, int ghostPercent,
 			Color color, Color identity)
@@ -301,6 +310,36 @@ final class CompactLayout
 			// A blank column between segments, so two that are both dark still read apart.
 			cell.stripWidth = Math.max(1, end - start - (i < bars.size() - 1 ? 1 : 0));
 		}
+	}
+
+	/**
+	 * What the edge columns cost the text: the columns themselves, the pixel between each
+	 * pair, and one clear column between the leftmost of them and the words.
+	 */
+	static int edgeReserve(int bars)
+	{
+		return bars <= 0 ? 0 : 2 * bars;
+	}
+
+	/**
+	 * The columns stand against the right edge in the order they were added, so hitpoints
+	 * keeps the same place on the page whether prayer is up beside it or not.
+	 */
+	static int placeEdge(List<Cell> cells)
+	{
+		List<Cell> bars = new ArrayList<>();
+		for (Cell cell : cells)
+		{
+			if (cell.showsBar())
+			{
+				bars.add(cell);
+			}
+		}
+		for (int i = 0; i < bars.size(); i++)
+		{
+			bars.get(i).edgeX = PANEL_WIDTH - 1 - 2 * (bars.size() - 1 - i);
+		}
+		return bars.size();
 	}
 
 	/**

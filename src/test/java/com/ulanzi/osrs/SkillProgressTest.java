@@ -1,6 +1,8 @@
 package com.ulanzi.osrs;
 
 import java.awt.Color;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -264,6 +266,42 @@ public class SkillProgressTest
 	}
 
 	@Test
+	public void aDropInPlaceOnlyCarriesThePagesOwnXp()
+	{
+		Map<Skill, Integer> gains = new EnumMap<>(Skill.class);
+		gains.put(Skill.FISHING, 30);
+		gains.put(Skill.COOKING, 90);
+		// Cooking what you fish: each page shows what it earned, and neither flashes the
+		// other's 120 total.
+		Assert.assertEquals(30, UlanziOsrsPlugin.pageDropXp(gains, SkillActivity.FISHING));
+		Assert.assertEquals(90, UlanziOsrsPlugin.pageDropXp(gains, SkillActivity.COOKING));
+		// A page with nothing of its own gained says nothing.
+		Assert.assertEquals(0, UlanziOsrsPlugin.pageDropXp(gains, SkillActivity.WOODCUTTING));
+		Assert.assertEquals(0, UlanziOsrsPlugin.pageDropXp(gains, null));
+	}
+
+	@Test
+	public void aFightIsAllOnePage()
+	{
+		Map<Skill, Integer> gains = new EnumMap<>(Skill.class);
+		gains.put(Skill.ATTACK, 20);
+		gains.put(Skill.STRENGTH, 20);
+		gains.put(Skill.DEFENCE, 20);
+		gains.put(Skill.HITPOINTS, 26);
+		// A controlled style pays three skills and every hit pays hitpoints; the melee
+		// page is the one page all of it belongs to.
+		Assert.assertEquals(86, UlanziOsrsPlugin.pageDropXp(gains, SkillActivity.MELEE));
+		Assert.assertEquals(26, UlanziOsrsPlugin.pageDropXp(gains, SkillActivity.RANGED));
+		// Hitpoints from a fight has no business on a skilling page.
+		Map<Skill, Integer> alongside = new EnumMap<>(Skill.class);
+		alongside.put(Skill.HITPOINTS, 26);
+		alongside.put(Skill.FIREMAKING, 40);
+		Assert.assertEquals(40, UlanziOsrsPlugin.pageDropXp(alongside, SkillActivity.FIREMAKING));
+		Assert.assertTrue(UlanziOsrsPlugin.pageShows(Skill.RANGED, SkillActivity.RANGED));
+		Assert.assertFalse(UlanziOsrsPlugin.pageShows(Skill.RANGED, SkillActivity.MELEE));
+	}
+
+	@Test
 	public void everyActivityTrainsASkill()
 	{
 		for (SkillActivity activity : SkillActivity.values())
@@ -321,5 +359,50 @@ public class SkillProgressTest
 		{
 			Assert.assertTrue(gradient.name(), gradient.stops(Color.GREEN).size() >= 2);
 		}
+	}
+
+	@Test
+	public void aSkillAt99IsMaxed()
+	{
+		Assert.assertFalse(UlanziOsrsPlugin.skillIsMaxed(98));
+		Assert.assertTrue(UlanziOsrsPlugin.skillIsMaxed(99));
+		Assert.assertTrue(UlanziOsrsPlugin.skillIsMaxed(Experience.MAX_REAL_LEVEL));
+	}
+
+	@Test
+	public void aMaxedMeleeSkillYieldsToOneStillGaining()
+	{
+		Map<Skill, Integer> gains = new EnumMap<>(Skill.class);
+		gains.put(Skill.ATTACK, 20);
+		gains.put(Skill.STRENGTH, 20);
+		gains.put(Skill.DEFENCE, 20);
+		gains.put(Skill.HITPOINTS, 26);
+		// An even split would have kept attack. Attack is already 99, so the page
+		// follows a skill the same hits are still training.
+		Assert.assertEquals(Skill.STRENGTH,
+			UlanziOsrsPlugin.meleePageSkill(gains, Skill.ATTACK, skill -> skill == Skill.ATTACK));
+	}
+
+	@Test
+	public void meleeStaysPutWhenEverySkillItPaysIsMaxed()
+	{
+		Map<Skill, Integer> gains = new EnumMap<>(Skill.class);
+		gains.put(Skill.ATTACK, 12);
+		gains.put(Skill.STRENGTH, 12);
+		Assert.assertEquals(Skill.STRENGTH,
+			UlanziOsrsPlugin.meleePageSkill(gains, Skill.STRENGTH, skill -> true));
+	}
+
+	@Test
+	public void aMaxedSkillDropsOutOfTheRotation()
+	{
+		List<SkillActivity> training = new ArrayList<>(
+			Arrays.asList(SkillActivity.WOODCUTTING, SkillActivity.FLETCHING));
+		Assert.assertEquals(Arrays.asList(SkillActivity.FLETCHING),
+			UlanziOsrsPlugin.activitiesForSkillPage(training, activity -> activity == SkillActivity.WOODCUTTING));
+		Assert.assertTrue(UlanziOsrsPlugin.activitiesForSkillPage(training, activity -> true).isEmpty());
+		// Left alone when nothing is being hidden, which is the page as it was.
+		Assert.assertEquals(training,
+			UlanziOsrsPlugin.activitiesForSkillPage(training, null));
 	}
 }

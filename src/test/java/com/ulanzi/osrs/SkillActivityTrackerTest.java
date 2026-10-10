@@ -12,6 +12,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import javax.imageio.ImageIO;
+import net.runelite.api.HitsplatID;
 import net.runelite.api.Skill;
 import net.runelite.api.gameval.AnimationID;
 import org.junit.Assert;
@@ -53,6 +54,27 @@ public class SkillActivityTrackerTest
 	}
 
 	@Test
+	public void wallMinePauseDoesNotCountAsIdle()
+	{
+		int wall = AnimationID.HUMAN_MINING_RUNE_PICKAXE_WALL;
+		int rock = AnimationID.HUMAN_MINING_RUNE_PICKAXE;
+		Assert.assertTrue(SkillActivities.isWallMining(wall));
+		Assert.assertFalse(SkillActivities.isWallMining(rock));
+		Assert.assertEquals(SkillActivity.MINING, SkillActivities.fromAnimation(wall));
+
+		long started = UlanziOsrsPlugin.wallMineIdleSince(-1, wall, 1_000L, 0L);
+		Assert.assertEquals(1_000L, started);
+		Assert.assertTrue(UlanziOsrsPlugin.inWallMineGap(1_000L, started));
+		Assert.assertTrue(UlanziOsrsPlugin.inWallMineGap(1_000L + UlanziOsrsPlugin.WALL_MINE_GAP_MS - 1, started));
+		Assert.assertFalse(UlanziOsrsPlugin.inWallMineGap(1_000L + UlanziOsrsPlugin.WALL_MINE_GAP_MS, started));
+
+		Assert.assertEquals(started, UlanziOsrsPlugin.wallMineIdleSince(-1, -1, 1_600L, started));
+		Assert.assertEquals(0L, UlanziOsrsPlugin.wallMineIdleSince(wall, -1, 1_600L, started));
+		Assert.assertEquals(0L, UlanziOsrsPlugin.wallMineIdleSince(-1, rock, 1_000L, 0L));
+		Assert.assertFalse(UlanziOsrsPlugin.inWallMineGap(1_000L, 0L));
+	}
+
+	@Test
 	public void choppingAnimationShowsWoodcuttingImmediately()
 	{
 		SkillActivityTracker tracker = new SkillActivityTracker();
@@ -91,6 +113,156 @@ public class SkillActivityTrackerTest
 	}
 
 	@Test
+	public void aFightIsOnUntilTheGraceRunsOut()
+	{
+		Assert.assertFalse(UlanziOsrsPlugin.isInCombat(0L, 5_000L, 10_000L));
+		Assert.assertTrue(UlanziOsrsPlugin.isInCombat(5_000L, 5_000L, 10_000L));
+		Assert.assertTrue(UlanziOsrsPlugin.isInCombat(5_000L, 14_999L, 10_000L));
+		Assert.assertFalse(UlanziOsrsPlugin.isInCombat(5_000L, 15_000L, 10_000L));
+	}
+
+	@Test
+	public void poisonIsNotAFight()
+	{
+		Assert.assertTrue(UlanziOsrsPlugin.isFightHitsplat(HitsplatID.DAMAGE_ME));
+		Assert.assertTrue(UlanziOsrsPlugin.isFightHitsplat(HitsplatID.BLOCK_OTHER));
+		Assert.assertTrue(UlanziOsrsPlugin.isFightHitsplat(HitsplatID.DAMAGE_MAX_ME));
+		Assert.assertFalse(UlanziOsrsPlugin.isFightHitsplat(HitsplatID.POISON));
+		Assert.assertFalse(UlanziOsrsPlugin.isFightHitsplat(HitsplatID.VENOM));
+		Assert.assertFalse(UlanziOsrsPlugin.isFightHitsplat(HitsplatID.HEAL));
+	}
+
+	@Test
+	public void everySkillPayingXpIsTraining()
+	{
+		SkillActivityTracker tracker = new SkillActivityTracker();
+		tracker.onXp(SkillActivity.FISHING, 1_000L);
+		tracker.onXp(SkillActivity.COOKING, 2_000L);
+		Assert.assertEquals(Arrays.asList(SkillActivity.FISHING, SkillActivity.COOKING),
+			tracker.training(2_000L, SkillActivityTracker.TRAINING_MS));
+		// The order is the same whoever paid last, so a rotation keeps its place.
+		tracker.onXp(SkillActivity.FISHING, 3_000L);
+		Assert.assertEquals(Arrays.asList(SkillActivity.FISHING, SkillActivity.COOKING),
+			tracker.training(3_000L, SkillActivityTracker.TRAINING_MS));
+		// Cooking stops, and drops out of the rotation a window later.
+		Assert.assertEquals(Collections.singletonList(SkillActivity.FISHING),
+			tracker.training(2_000L + SkillActivityTracker.TRAINING_MS, SkillActivityTracker.TRAINING_MS));
+		tracker.reset();
+		Assert.assertTrue(tracker.training(3_000L, SkillActivityTracker.TRAINING_MS).isEmpty());
+	}
+
+	@Test
+	public void aSwapDipsAndComesBackUp()
+	{
+		Assert.assertEquals(1.0, UlanziOsrsPlugin.fadeFactor(0L, 5_000L), 0.0001);
+		Assert.assertEquals(1.0, UlanziOsrsPlugin.fadeFactor(1_000L, 1_000L), 0.0001);
+		Assert.assertEquals(UlanziOsrsPlugin.FADE_DIP,
+			UlanziOsrsPlugin.fadeFactor(1_000L, 1_000L + UlanziOsrsPlugin.FADE_MS / 2), 0.0001);
+		Assert.assertEquals(1.0,
+			UlanziOsrsPlugin.fadeFactor(1_000L, 1_000L + UlanziOsrsPlugin.FADE_MS), 0.0001);
+		double quarter = UlanziOsrsPlugin.fadeFactor(1_000L, 1_000L + UlanziOsrsPlugin.FADE_MS / 4);
+		Assert.assertTrue(quarter > UlanziOsrsPlugin.FADE_DIP && quarter < 1.0);
+	}
+
+	@Test
+	public void aProfileWritesTheSettingsItStandsFor()
+	{
+		// Custom is not a preset and owns nothing, so nothing it touches sends it back
+		// to itself.
+		Assert.assertTrue(Profile.CUSTOM.settings().isEmpty());
+		Assert.assertNull(Profile.CUSTOM.valueFor("skillProgress"));
+
+		// Combat spends the line on staying alive: run energy off, skill page off.
+		Assert.assertEquals(StatStyle.VALUE.name(), Profile.COMBAT.valueFor("hitpointsStyle"));
+		Assert.assertEquals(StatStyle.VALUE.name(), Profile.COMBAT.valueFor("prayerStyle"));
+		Assert.assertEquals(StatStyle.OFF.name(), Profile.COMBAT.valueFor("energyStyle"));
+		Assert.assertEquals(SkillProgressMode.OFF.name(), Profile.COMBAT.valueFor("skillProgress"));
+		Assert.assertEquals("false", Profile.COMBAT.valueFor("skillProgressInCombat"));
+
+		// Skilling keeps the skill page through a fight, and turns on both icon settings
+		// with it: the page used to need them and said so nowhere.
+		Assert.assertEquals(SkillProgressMode.BOTH.name(), Profile.SKILLING.valueFor("skillProgress"));
+		Assert.assertEquals("true", Profile.SKILLING.valueFor("skillProgressInCombat"));
+		Assert.assertEquals("true", Profile.SKILLING.valueFor("showActivity"));
+		Assert.assertEquals("true", Profile.SKILLING.valueFor("activityInCombat"));
+
+		// Hybrid has the skill page while skilling and hands the panel to the combat
+		// line for a fight.
+		Assert.assertEquals(SkillProgressMode.BOTH.name(), Profile.HYBRID.valueFor("skillProgress"));
+		Assert.assertEquals("false", Profile.HYBRID.valueFor("skillProgressInCombat"));
+		Assert.assertEquals("true", Profile.HYBRID.valueFor("showActivity"));
+		Assert.assertEquals(StatStyle.VALUE.name(), Profile.HYBRID.valueFor("hitpointsStyle"));
+		Assert.assertEquals(StatStyle.OFF.name(), Profile.HYBRID.valueFor("energyStyle"));
+
+		// A setting a profile has no opinion about is nobody's business but yours.
+		Assert.assertNull(Profile.COMBAT.valueFor("specStyle"));
+		Assert.assertNull(Profile.SKILLING.valueFor("statsLayout"));
+	}
+
+	@Test
+	public void theOldAlertBoxesFoldIntoOneStyle()
+	{
+		Assert.assertEquals(AlertStyle.FLASH_AND_BEEP, UlanziOsrsPlugin.alertStyle(true, true, true));
+		Assert.assertEquals(AlertStyle.FLASH, UlanziOsrsPlugin.alertStyle(true, true, false));
+		Assert.assertEquals(AlertStyle.BEEP, UlanziOsrsPlugin.alertStyle(true, false, true));
+		// Switched on but doing neither was a warning that never arrived, and switched
+		// off with both ticked was the same thing said the other way about.
+		Assert.assertEquals(AlertStyle.OFF, UlanziOsrsPlugin.alertStyle(true, false, false));
+		Assert.assertEquals(AlertStyle.OFF, UlanziOsrsPlugin.alertStyle(false, true, true));
+	}
+
+	@Test
+	public void theAfkLabelJoinsWhateverTheTintWas()
+	{
+		Assert.assertEquals(AfkTintMode.VALUES_AND_LABEL, UlanziOsrsPlugin.withLabel("VALUES"));
+		Assert.assertEquals(AfkTintMode.LABEL, UlanziOsrsPlugin.withLabel("OFF"));
+		Assert.assertEquals(AfkTintMode.BACKGROUND, UlanziOsrsPlugin.withLabel("BACKGROUND"));
+		Assert.assertEquals(AfkTintMode.VALUES_AND_LABEL, UlanziOsrsPlugin.withLabel("NOT_A_MODE"));
+	}
+
+	@Test
+	public void aTintModeKnowsWhatItPaints()
+	{
+		Assert.assertTrue(AfkTintMode.VALUES_AND_LABEL.tintsValues());
+		Assert.assertTrue(AfkTintMode.VALUES_AND_LABEL.showsLabel());
+		Assert.assertFalse(AfkTintMode.VALUES_AND_LABEL.tintsBackground());
+		Assert.assertTrue(AfkTintMode.LABEL.showsLabel());
+		Assert.assertFalse(AfkTintMode.LABEL.tintsValues());
+		Assert.assertTrue(AfkTintMode.BOTH.tintsValues());
+		Assert.assertTrue(AfkTintMode.BOTH.tintsBackground());
+		Assert.assertFalse(AfkTintMode.BOTH.showsLabel());
+		Assert.assertFalse(AfkTintMode.OFF.tintsValues());
+	}
+
+	@Test
+	public void edgeColumnsStandAgainstTheRightEdge()
+	{
+		List<CompactLayout.Cell> cells = new ArrayList<>();
+		cells.add(new CompactLayout.Cell(StatKind.HITPOINTS, StatStyle.BAR, "50", 2, 50, -1,
+			Color.GREEN, Color.GREEN));
+		cells.add(new CompactLayout.Cell(StatKind.PRAYER, StatStyle.BAR, "43", 2, 43, -1,
+			Color.BLUE, Color.BLUE));
+		Assert.assertEquals(2, CompactLayout.placeEdge(cells));
+		// Hitpoints keeps its place whether prayer is beside it or not, and a blank column
+		// sits between the two.
+		Assert.assertEquals(CompactLayout.PANEL_WIDTH - 3, cells.get(0).edgeX);
+		Assert.assertEquals(CompactLayout.PANEL_WIDTH - 1, cells.get(1).edgeX);
+		Assert.assertEquals(0, CompactLayout.edgeReserve(0));
+		Assert.assertEquals(4, CompactLayout.edgeReserve(2));
+	}
+
+	@Test
+	public void edgeColumnsTakeTheirRoomOffTheWords()
+	{
+		// 45 and 45k share the line on a page with nothing at its edge, and stop sharing it
+		// once two columns have taken their four pixels.
+		Assert.assertEquals(3, UlanziOsrsPlugin.skillProgressText(
+			SkillProgressMode.BOTH, 45, 45_200, false, Color.GREEN, 24).size());
+		Assert.assertEquals(1, UlanziOsrsPlugin.skillProgressText(
+			SkillProgressMode.BOTH, 45, 45_200, false, Color.GREEN, 24 - CompactLayout.edgeReserve(2)).size());
+	}
+
+	@Test
 	public void otherAnimationClearsTheActivity()
 	{
 		SkillActivityTracker tracker = new SkillActivityTracker();
@@ -118,6 +290,19 @@ public class SkillActivityTrackerTest
 		Assert.assertEquals(SkillActivity.FISHING,
 			SkillActivities.fromAnimation(AnimationID.HUMAN_HARPOON));
 		Assert.assertNull(SkillActivities.fromAnimation(-1));
+	}
+
+	@Test
+	public void bloodwoodFellingMapsToWoodcutting()
+	{
+		Assert.assertEquals(SkillActivity.WOODCUTTING,
+			SkillActivities.fromAnimation(AnimationID.HUMAN_FELLING_CHARGE_SLOW01));
+		Assert.assertEquals(SkillActivity.WOODCUTTING,
+			SkillActivities.fromAnimation(AnimationID.HUMAN_FELLING_SWING01));
+		Assert.assertEquals(SkillActivity.WOODCUTTING,
+			SkillActivities.fromAnimation(AnimationID.HUMAN_FELLING_BOTCH01));
+		Assert.assertEquals(SkillActivity.WOODCUTTING,
+			SkillActivities.fromAnimation(AnimationID.HUMAN_FELLING_TAP01));
 	}
 
 	@Test
