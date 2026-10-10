@@ -98,7 +98,9 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "host",
 		name = "Clock address",
-		description = "IP or hostname of the AWTRIX NG clock, with a port if it needs one. For example 192.168.1.50.",
+		description = "IP or hostname of the AWTRIX NG clock, with a port if it needs one. For example 192.168.1.50. "
+			+ "Nothing is sent until this is set. Hitpoints, prayer, run energy, special attack, and skill progress go there.",
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		position = 0,
 		section = connectionSection
 	)
