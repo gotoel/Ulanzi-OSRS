@@ -242,9 +242,10 @@ public class CompactRenderTest
 
 	private static JsonArray render(List<CompactLayout.Cell> cells)
 	{
-		AwtrixClient client = new AwtrixClient(new OkHttpClient(), new UlanziConfig()
+		UlanziConfig config = new UlanziConfig()
 		{
-		}, new Gson());
+		};
+		AwtrixClient client = new AwtrixClient(new OkHttpClient(), config, new Gson(), new ChipPlayer(config));
 		return client.compactDraw(cells);
 	}
 }

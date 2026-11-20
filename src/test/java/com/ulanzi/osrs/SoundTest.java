@@ -58,6 +58,76 @@ public class SoundTest
 	}
 
 	@Test
+	public void outputsRouteToTheRightPlaces()
+	{
+		Assert.assertTrue(SoundOutput.CLOCK.toClock());
+		Assert.assertFalse(SoundOutput.CLOCK.toComputer());
+		Assert.assertFalse(SoundOutput.COMPUTER.toClock());
+		Assert.assertTrue(SoundOutput.COMPUTER.toComputer());
+		Assert.assertTrue(SoundOutput.BOTH.toClock() && SoundOutput.BOTH.toComputer());
+		Assert.assertFalse(SoundOutput.OFF.toClock() || SoundOutput.OFF.toComputer());
+	}
+
+	@Test
+	public void rtttlNotesHaveTheirPitchAndLength()
+	{
+		// b=120 makes a quarter note 500 ms.
+		List<Rtttl.Note> notes = Rtttl.parse("t:d=4,o=4,b=120:a,8a5,p,4c.,c#");
+		Assert.assertEquals(5, notes.size());
+		Assert.assertEquals(440.0, notes.get(0).hz, 0.01);
+		Assert.assertEquals(500, notes.get(0).ms);
+		Assert.assertEquals(880.0, notes.get(1).hz, 0.01);
+		Assert.assertEquals(250, notes.get(1).ms);
+		Assert.assertEquals(0.0, notes.get(2).hz, 0.0);
+		Assert.assertEquals(261.63, notes.get(3).hz, 0.01);
+		Assert.assertEquals(750, notes.get(3).ms);
+		Assert.assertEquals(277.18, notes.get(4).hz, 0.01);
+	}
+
+	@Test
+	public void badMelodiesAreSilentNotErrors()
+	{
+		Assert.assertTrue(Rtttl.parse(null).isEmpty());
+		Assert.assertTrue(Rtttl.parse("nonsense").isEmpty());
+		Assert.assertTrue(Rtttl.parse("x:d=4,o=5,b=100:zz,9").isEmpty());
+	}
+
+	@Test
+	public void everyTuneRendersSoftlyAndQuietly()
+	{
+		for (Tune tune : Tune.values())
+		{
+			for (SoundStyle style : SoundStyle.values())
+			{
+				List<Rtttl.Note> notes = Rtttl.parse(tune.rtttl(style));
+				Assert.assertFalse(tune + " " + style, notes.isEmpty());
+				byte[] pcm = ChipPlayer.render(notes, 100);
+				Assert.assertTrue(pcm.length > 0);
+				int peak = 0;
+				for (int i = 0; i < pcm.length; i += 2)
+				{
+					short sample = (short) ((pcm[i] & 0xFF) | (pcm[i + 1] << 8));
+					peak = Math.max(peak, Math.abs(sample));
+				}
+				// Full volume stays under half scale, and every note eases in from silence.
+				Assert.assertTrue(tune + " peaks at " + peak, peak > 0 && peak <= Short.MAX_VALUE / 2);
+				Assert.assertEquals(0, (short) ((pcm[0] & 0xFF) | (pcm[1] << 8)));
+			}
+		}
+		Assert.assertEquals(0, peakOf(ChipPlayer.render(Rtttl.parse(Tune.AFK.rtttl(SoundStyle.SOFT)), 0)));
+	}
+
+	private static int peakOf(byte[] pcm)
+	{
+		int peak = 0;
+		for (int i = 0; i < pcm.length; i += 2)
+		{
+			peak = Math.max(peak, Math.abs((short) ((pcm[i] & 0xFF) | (pcm[i + 1] << 8))));
+		}
+		return peak;
+	}
+
+	@Test
 	public void alertVolumeIsReadBackOrDefaulted()
 	{
 		JsonObject settings = new JsonObject();

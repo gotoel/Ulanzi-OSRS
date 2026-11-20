@@ -235,6 +235,7 @@ public class UlanziOsrsPlugin extends Plugin
 	protected void shutDown()
 	{
 		awtrixClient.clearAll();
+		awtrixClient.stopSound();
 		awtrixClient.setMessageSink(null);
 		awtrixClient.setStatusSink(null);
 		resetState();
@@ -514,8 +515,9 @@ public class UlanziOsrsPlugin extends Plugin
 			awtrixClient.applyVolume();
 		}
 
-		// Picking a style is a question of how it sounds, so play it.
-		if ("soundStyle".equals(event.getKey()))
+		// Each of these is a question of how it sounds, so play it.
+		if ("soundStyle".equals(event.getKey()) || "soundOutput".equals(event.getKey())
+			|| "computerVolume".equals(event.getKey()))
 		{
 			awtrixClient.playSample();
 		}

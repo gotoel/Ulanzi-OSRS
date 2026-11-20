@@ -64,6 +64,7 @@ public class AwtrixClient
 	private final OkHttpClient httpClient;
 	private final UlanziConfig config;
 	private final Gson gson;
+	private final ChipPlayer chipPlayer;
 
 	private final AtomicReference<String> lastStatsBody = new AtomicReference<>();
 	private final AtomicReference<String> lastAfkBody = new AtomicReference<>();
@@ -150,11 +151,12 @@ public class AwtrixClient
 	static final int MIN_FIXED_BRIGHTNESS = 8;
 
 	@Inject
-	AwtrixClient(OkHttpClient httpClient, UlanziConfig config, Gson gson)
+	AwtrixClient(OkHttpClient httpClient, UlanziConfig config, Gson gson, ChipPlayer chipPlayer)
 	{
 		this.httpClient = httpClient;
 		this.config = config;
 		this.gson = gson;
+		this.chipPlayer = chipPlayer;
 	}
 
 	/**
@@ -653,6 +655,15 @@ public class AwtrixClient
 		{
 			return;
 		}
+		SoundOutput output = config.soundOutput();
+		if (output.toComputer())
+		{
+			chipPlayer.play(rtttl);
+		}
+		if (!output.toClock())
+		{
+			return;
+		}
 		JsonObject body = new JsonObject();
 		body.addProperty("name", "osrs-beep");
 		body.addProperty("text", "");
@@ -672,10 +683,25 @@ public class AwtrixClient
 	private void addSound(JsonObject body, Tune tune)
 	{
 		String rtttl = rtttl(tune);
-		if (rtttl != null)
+		if (rtttl == null)
+		{
+			return;
+		}
+		SoundOutput output = config.soundOutput();
+		if (output.toComputer())
+		{
+			chipPlayer.play(rtttl);
+		}
+		if (output.toClock())
 		{
 			body.addProperty("soundRtttl", rtttl);
 		}
+	}
+
+	/** Cuts off a tune playing on the computer, for when the plugin stops. */
+	void stopSound()
+	{
+		chipPlayer.stop();
 	}
 
 	/** The melody to send for this tune, or null when sound is switched off. */

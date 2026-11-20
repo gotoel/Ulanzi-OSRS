@@ -184,7 +184,9 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "soundOutput",
 		name = "Play sounds on",
-		description = "Off silences every tone at once, whatever the alerts below are set to.",
+		description = "Clock plays tones on the clock's buzzer. Computer plays them through your speakers instead, "
+			+ "in a soft voice, and works without a clock. Off silences every tone at once, whatever the alerts are "
+			+ "set to.",
 		position = 0,
 		section = soundSection
 	)
@@ -218,6 +220,19 @@ public interface UlanziConfig extends Config
 	default int clockVolume()
 	{
 		return 0;
+	}
+
+	@ConfigItem(
+		keyName = "computerVolume",
+		name = "Computer volume",
+		description = "How loud tones play through your speakers, when Play sounds on is Computer or Both.",
+		position = 3,
+		section = soundSection
+	)
+	@Range(min = 0, max = 100)
+	default int computerVolume()
+	{
+		return 40;
 	}
 
 	@ConfigItem(
