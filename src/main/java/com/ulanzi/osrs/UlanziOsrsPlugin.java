@@ -509,6 +509,17 @@ public class UlanziOsrsPlugin extends Plugin
 				: "Not checked yet.");
 		}
 
+		if ("clockVolume".equals(event.getKey()))
+		{
+			awtrixClient.applyVolume();
+		}
+
+		// Picking a style is a question of how it sounds, so play it.
+		if ("soundStyle".equals(event.getKey()))
+		{
+			awtrixClient.playSample();
+		}
+
 		if ("afkEnabled".equals(event.getKey()) && !"true".equals(event.getNewValue()))
 		{
 			awtrixClient.dismissAfk();
@@ -585,6 +596,7 @@ public class UlanziOsrsPlugin extends Plugin
 		{
 			awtrixClient.clearCache();
 			awtrixClient.applyBrightness();
+			awtrixClient.applyVolume();
 			awtrixClient.setPulse(1.0);
 			drawPreview(preview);
 		});
@@ -1445,6 +1457,7 @@ public class UlanziOsrsPlugin extends Plugin
 
 			// A no-op once it has taken, and a retry if the clock was not answering yet.
 			awtrixClient.applyBrightness();
+			awtrixClient.applyVolume();
 
 			// Threshold alerts are pushed below, before the page is picked, and are
 			// there to be noticed, so they never take the pulse's resting dim.

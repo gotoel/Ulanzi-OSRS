@@ -60,13 +60,6 @@ public class AwtrixClient
 	private static final int SMALL_CHAR_WIDTH = 4;
 
 	private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
-	private static final String AFK_RTTTL = "afk:d=4,o=5,b=160:c6,p,c6";
-	private static final String HP_RTTTL = "lowhp:d=16,o=6,b=200:c,e,g,c7";
-	private static final String PRAY_RTTTL = "lowpray:d=8,o=5,b=140:e,c,e,c";
-	/** Rising, where the warnings fall: the one alert that is good news. */
-	private static final String SPEC_RTTTL = "spec:d=16,o=5,b=180:g,c6,e6,8g6";
-	private static final String LEVEL_RTTTL = "levelup:d=8,o=5,b=180:c,e,g,4c6,p,g,2c6";
-	private static final String FORESTRY_RTTTL = "forestry:d=16,o=6,b=180:e,g,b,8e7,p,8b";
 
 	private final OkHttpClient httpClient;
 	private final UlanziConfig config;
@@ -82,6 +75,12 @@ public class AwtrixClient
 	private final AtomicReference<Brightness> savedBrightness = new AtomicReference<>();
 	private final AtomicBoolean brightnessSnapshotTried = new AtomicBoolean(false);
 	private final AtomicReference<String> appliedBrightness = new AtomicReference<>();
+	/** The clock's own alert volume, read once before the first change and put back on the way out. */
+	private final AtomicReference<Integer> savedVolume = new AtomicReference<>();
+	private final AtomicBoolean volumeSnapshotTried = new AtomicBoolean(false);
+	private final AtomicReference<Integer> appliedVolume = new AtomicReference<>();
+	/** Set once the clock has turned the setting down, so it is not asked again every tick. */
+	private final AtomicBoolean volumeRefused = new AtomicBoolean(false);
 	/** What the panel is actually running at, which is what every colour has to survive. */
 	private final AtomicInteger panelBrightness = new AtomicInteger(DEFAULT_BRIGHTNESS);
 	private final AtomicLong brightnessReadMs = new AtomicLong(0L);
@@ -136,6 +135,7 @@ public class AwtrixClient
 	private static final int ICON_OPEN_FROM = 64;
 	private static final int ICON_OPEN_FULL = 8;
 	static final int DEFAULT_BRIGHTNESS = 120;
+	static final int DEFAULT_ALERT_VOLUME = 100;
 	private static final long BRIGHTNESS_POLL_MS = 15_000L;
 	/**
 	 * How much the room has to have brightened before the clock is trusted with its own
@@ -466,7 +466,7 @@ public class AwtrixClient
 		}
 		if (sound)
 		{
-			body.addProperty("soundRtttl", LEVEL_RTTTL);
+			addSound(body, Tune.LEVEL_UP);
 		}
 		enqueue("POST", "/api/v1/notifications", body.toString(), null);
 	}
@@ -571,7 +571,7 @@ public class AwtrixClient
 
 		if (playSound && config.afkSound())
 		{
-			body.addProperty("soundRtttl", AFK_RTTTL);
+			addSound(body, Tune.AFK);
 		}
 
 		String json = body.toString();
@@ -589,7 +589,7 @@ public class AwtrixClient
 		body.addProperty("durationMs", 60_000);
 		if (playSound && config.afkSound())
 		{
-			body.addProperty("soundRtttl", AFK_RTTTL);
+			addSound(body, Tune.AFK);
 		}
 		putStats(body);
 	}
@@ -642,8 +642,17 @@ public class AwtrixClient
 		}
 	}
 
-	void beep(String rtttl)
+	/**
+	 * A tone on its own. Nothing is sent at all with sound off, since the notification that
+	 * carries it would otherwise still blank the panel for a moment.
+	 */
+	private void beep(Tune tune)
 	{
+		String rtttl = rtttl(tune);
+		if (rtttl == null)
+		{
+			return;
+		}
 		JsonObject body = new JsonObject();
 		body.addProperty("name", "osrs-beep");
 		body.addProperty("text", "");
@@ -654,24 +663,54 @@ public class AwtrixClient
 		enqueue("POST", "/api/v1/notifications", body.toString(), null);
 	}
 
+	/** One tone in the current style, so a change of style can be heard straight away. */
+	void playSample()
+	{
+		beep(Tune.SPEC_READY);
+	}
+
+	private void addSound(JsonObject body, Tune tune)
+	{
+		String rtttl = rtttl(tune);
+		if (rtttl != null)
+		{
+			body.addProperty("soundRtttl", rtttl);
+		}
+	}
+
+	/** The melody to send for this tune, or null when sound is switched off. */
+	String rtttl(Tune tune)
+	{
+		return rtttlFor(tune, config.soundOutput(), config.soundStyle());
+	}
+
+	static String rtttlFor(Tune tune, SoundOutput output, SoundStyle style)
+	{
+		if (tune == null || output == SoundOutput.OFF)
+		{
+			return null;
+		}
+		return tune.rtttl(style == null ? SoundStyle.SOFT : style);
+	}
+
 	void beepLowHp()
 	{
-		beep(HP_RTTTL);
+		beep(Tune.LOW_HP);
 	}
 
 	void beepLowPrayer()
 	{
-		beep(PRAY_RTTTL);
+		beep(Tune.LOW_PRAYER);
 	}
 
 	void beepSpecReady()
 	{
-		beep(SPEC_RTTTL);
+		beep(Tune.SPEC_READY);
 	}
 
 	void beepAfk()
 	{
-		beep(AFK_RTTTL);
+		beep(Tune.AFK);
 	}
 
 	/**
@@ -787,13 +826,13 @@ public class AwtrixClient
 	void showLowHpAlert(int hitpoints, boolean flash, boolean beep, boolean hold)
 	{
 		showThresholdAlert(NOTIF_LOW_HP, "HP " + hitpoints, Color.RED, new Color(40, 0, 0),
-			flash, beep, hold, HP_RTTTL);
+			flash, beep, hold, Tune.LOW_HP);
 	}
 
 	void showLowPrayerAlert(int prayer, boolean flash, boolean beep, boolean hold)
 	{
 		showThresholdAlert(NOTIF_LOW_PRAY, "PRAY " + prayer, new Color(0x4F, 0xA3, 0xFF), new Color(0, 0, 40),
-			flash, beep, hold, PRAY_RTTTL);
+			flash, beep, hold, Tune.LOW_PRAYER);
 	}
 
 	/**
@@ -804,7 +843,7 @@ public class AwtrixClient
 	void showSpecReadyAlert(int spec, boolean flash, boolean beep, boolean hold)
 	{
 		showThresholdAlert(NOTIF_SPEC_READY, "SPEC " + spec, new Color(0xFF, 0x8C, 0x00), new Color(40, 20, 0),
-			flash, beep, hold, SPEC_RTTTL);
+			flash, beep, hold, Tune.SPEC_READY);
 	}
 
 	void dismissLowAlerts()
@@ -849,7 +888,7 @@ public class AwtrixClient
 
 	void beepForestry()
 	{
-		beep(FORESTRY_RTTTL);
+		beep(Tune.FORESTRY);
 	}
 
 	/**
@@ -902,7 +941,7 @@ public class AwtrixClient
 	}
 
 	private void showThresholdAlert(String name, String text, Color textColor, Color background,
-		boolean flash, boolean beep, boolean hold, String rtttl)
+		boolean flash, boolean beep, boolean hold, Tune tune)
 	{
 		if (!flash && !beep && !hold)
 		{
@@ -937,7 +976,7 @@ public class AwtrixClient
 
 		if (beep)
 		{
-			body.addProperty("soundRtttl", rtttl);
+			addSound(body, tune);
 		}
 
 		enqueue("POST", "/api/v1/notifications", body.toString(), null);
@@ -1290,6 +1329,8 @@ public class AwtrixClient
 	{
 		clearCache();
 		restoreBrightness();
+		restoreVolume();
+		volumeRefused.set(false);
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_AFK, null, null);
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_LOW_HP, null, null);
 		enqueue("DELETE", "/api/v1/notifications/" + NOTIF_LOW_PRAY, null, null);
@@ -1564,6 +1605,119 @@ public class AwtrixClient
 			return;
 		}
 		enqueue("PATCH", "/api/v1/settings", saved.toJson().toString(), null);
+	}
+
+	/**
+	 * Holds the clock's alert volume where the config asks, if it asks at all.
+	 *
+	 * AWTRIX NG plays every notification sound at its master volume times its alert share,
+	 * and has no volume of its own for a single notification, so the alert share is the one
+	 * setting that turns our tones down without touching anything else the clock plays.
+	 * Called every tick; it sends nothing once the level has taken.
+	 */
+	void applyVolume()
+	{
+		int wanted = Math.max(0, Math.min(100, config.clockVolume()));
+		if (wanted <= 0)
+		{
+			restoreVolume();
+			return;
+		}
+		if (volumeRefused.get())
+		{
+			return;
+		}
+		Integer applied = appliedVolume.get();
+		if ((applied != null && applied == wanted) || !appliedVolume.compareAndSet(applied, wanted))
+		{
+			return;
+		}
+
+		if (savedVolume.get() != null || volumeSnapshotTried.getAndSet(true))
+		{
+			putVolume(wanted);
+			return;
+		}
+		send("GET", "/api/v1/settings", null, false, result ->
+		{
+			if (result.ok && result.body != null)
+			{
+				try
+				{
+					JsonObject settings = gson.fromJson(result.body, JsonObject.class);
+					if (settings != null)
+					{
+						savedVolume.compareAndSet(null, parseAlertVolume(settings));
+					}
+				}
+				catch (JsonParseException ex)
+				{
+					log.debug("Could not read the clock's settings", ex);
+				}
+			}
+			putVolume(wanted);
+		});
+	}
+
+	private void putVolume(int level)
+	{
+		send("PATCH", "/api/v1/settings", volumeJson(level).toString(), false, result ->
+		{
+			if (result.ok)
+			{
+				return;
+			}
+			if (result.reachable)
+			{
+				// The clock answered and said no, which a firmware without the setting
+				// will keep saying, so it is not asked again until the plugin restarts.
+				volumeRefused.set(true);
+				messages.accept("The clock turned down Clock volume (" + result.problem
+					+ "). Its firmware may not have an alert volume.");
+				return;
+			}
+			// Not there at all: forget it, so the next tick tries again.
+			appliedVolume.compareAndSet(level, null);
+		});
+	}
+
+	/**
+	 * Puts the clock's own alert volume back. Nothing is sent if we never changed it.
+	 */
+	private void restoreVolume()
+	{
+		volumeSnapshotTried.set(false);
+		if (appliedVolume.getAndSet(null) == null)
+		{
+			return;
+		}
+		Integer saved = savedVolume.getAndSet(null);
+		if (saved == null || volumeRefused.get())
+		{
+			return;
+		}
+		enqueue("PATCH", "/api/v1/settings", volumeJson(saved).toString(), null);
+	}
+
+	static JsonObject volumeJson(int level)
+	{
+		JsonObject body = new JsonObject();
+		body.addProperty("alertVolume", Math.max(0, Math.min(100, level)));
+		return body;
+	}
+
+	/**
+	 * The clock's alert share, or its documented default of 100 when the settings do not
+	 * carry one, so there is always something to put back.
+	 */
+	static int parseAlertVolume(JsonObject settings)
+	{
+		JsonElement level = settings.get("alertVolume");
+		if (level == null || !level.isJsonPrimitive() || !level.getAsJsonPrimitive().isNumber())
+		{
+			return DEFAULT_ALERT_VOLUME;
+		}
+		return Math.max(0, Math.min(100, level.getAsInt()));
 	}
 
 	static Brightness parseBrightness(JsonObject settings)

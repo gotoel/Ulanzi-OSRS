@@ -74,9 +74,17 @@ public interface UlanziConfig extends Config
 	String levelUpSection = "levelUps";
 
 	@ConfigSection(
+		name = "Sound",
+		description = "Where the alert tones play, how they sound, and how loud the clock plays them.",
+		position = 7,
+		closedByDefault = true
+	)
+	String soundSection = "sound";
+
+	@ConfigSection(
 		name = "Advanced",
 		description = "Settings worth changing once, if at all.",
-		position = 7,
+		position = 8,
 		closedByDefault = true
 	)
 	String advancedSection = "advanced";
@@ -169,6 +177,45 @@ public interface UlanziConfig extends Config
 	)
 	@Range(min = 0, max = 255)
 	default int brightness()
+	{
+		return 0;
+	}
+
+	@ConfigItem(
+		keyName = "soundOutput",
+		name = "Play sounds on",
+		description = "Off silences every tone at once, whatever the alerts below are set to.",
+		position = 0,
+		section = soundSection
+	)
+	default SoundOutput soundOutput()
+	{
+		return SoundOutput.CLOCK;
+	}
+
+	@ConfigItem(
+		keyName = "soundStyle",
+		name = "Sound style",
+		description = "Soft plays short, low tones, which are much easier on the ears (and on pets) through the "
+			+ "clock's buzzer. Classic plays the original high-pitched tunes.",
+		position = 1,
+		section = soundSection
+	)
+	default SoundStyle soundStyle()
+	{
+		return SoundStyle.SOFT;
+	}
+
+	@ConfigItem(
+		keyName = "clockVolume",
+		name = "Clock volume",
+		description = "How loud the clock plays alert tones, from 1 to 100. 0 leaves the clock's own volume alone. "
+			+ "The clock's setting is put back when the plugin stops.",
+		position = 2,
+		section = soundSection
+	)
+	@Range(min = 0, max = 100)
+	default int clockVolume()
 	{
 		return 0;
 	}
@@ -846,7 +893,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "levelUpSound",
 		name = "Level-up jingle",
-		description = "Play a short fanfare on the clock's buzzer with the celebration. Off by default: it is loud.",
+		description = "Play a short fanfare on the clock's buzzer with the celebration. Off by default.",
 		position = 1,
 		section = levelUpSection
 	)
