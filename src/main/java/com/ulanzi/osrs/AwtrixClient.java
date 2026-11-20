@@ -65,6 +65,8 @@ public class AwtrixClient
 	private final UlanziConfig config;
 	private final Gson gson;
 	private final ChipPlayer chipPlayer;
+	private final VirtualClock virtualClock;
+	private final ThreadLocal<ClockOutput> pinnedOutput = new ThreadLocal<>();
 
 	private final AtomicReference<String> lastStatsBody = new AtomicReference<>();
 	private final AtomicReference<String> lastAfkBody = new AtomicReference<>();
@@ -151,12 +153,14 @@ public class AwtrixClient
 	static final int MIN_FIXED_BRIGHTNESS = 8;
 
 	@Inject
-	AwtrixClient(OkHttpClient httpClient, UlanziConfig config, Gson gson, ChipPlayer chipPlayer)
+	AwtrixClient(OkHttpClient httpClient, UlanziConfig config, Gson gson, ChipPlayer chipPlayer,
+		VirtualClock virtualClock)
 	{
 		this.httpClient = httpClient;
 		this.config = config;
 		this.gson = gson;
 		this.chipPlayer = chipPlayer;
+		this.virtualClock = virtualClock;
 	}
 
 	/**
@@ -379,7 +383,7 @@ public class AwtrixClient
 
 	void testConnection()
 	{
-		if (baseUrl() == null)
+		if (baseUrl() == null && output().toReal())
 		{
 			messages.accept("Set the clock address first.");
 			status("No clock address set.");
@@ -1891,8 +1895,52 @@ public class AwtrixClient
 	 * that already expired. Only no answer at all, or a rejected login, counts as unreachable.
 	 * Background requests report a change in the game chat; a test reports its own result.
 	 */
+	/**
+	 * Where requests go. Normally the config says, but the plugin can pin it for one call,
+	 * which is how the real clock is cleared after the config has already moved away from it.
+	 */
+	ClockOutput output()
+	{
+		ClockOutput pinned = pinnedOutput.get();
+		if (pinned != null)
+		{
+			return pinned;
+		}
+		ClockOutput configured = config.clockOutput();
+		return configured == null ? ClockOutput.REAL : configured;
+	}
+
+	/** Clears the real clock alone, for when the pages stop going to it. */
+	void clearRealClock()
+	{
+		pinnedOutput.set(ClockOutput.REAL);
+		try
+		{
+			clearAll();
+		}
+		finally
+		{
+			pinnedOutput.remove();
+		}
+	}
+
 	private void send(String method, String path, String jsonBody, boolean test, Consumer<Result> done)
 	{
+		ClockOutput output = output();
+		if (output.toVirtual())
+		{
+			VirtualClock.Reply reply = virtualClock.handle(method, path, jsonBody);
+			if (!output.toReal())
+			{
+				status("Showing on the virtual clock.");
+				if (done != null)
+				{
+					done.accept(reply.ok() ? Result.ok(reply.body) : Result.answered("HTTP " + reply.code));
+				}
+				return;
+			}
+		}
+
 		String base = baseUrl();
 		if (base == null)
 		{

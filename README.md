@@ -10,6 +10,17 @@ Hitpoints, prayer, run energy, and special attack stay on the 32×8 panel while 
 
 ![Bar toward the next level](docs/gallery/skill-bar.gif)
 
+## No clock? Use the virtual one
+
+Set **Virtual clock → Show pages on** to **Virtual clock**, and the same pages show in a small window on your desktop instead. Nothing is sent over the network.
+
+- Drag the window anywhere. Drag its bottom-right corner to resize it.
+- Right-click it for **Always on top**, **Only when tabbed out**, **Lock position**, LED size and style, or to close it.
+- **Only when tabbed out** hides it while you are playing and shows it when you switch to another window.
+- Tones play through your speakers. Set them under **Sound**.
+
+**Both** shows the pages on the real clock and the virtual one at once.
+
 ## Flash the clock
 
 Stock firmware cannot show a custom page. Flash [AWTRIX NG](https://blueforcer.github.io/awtrix-ng/getting-started/flashing/) once: in Chrome or Edge, choose **Fresh install** and pick the clock's port.
@@ -26,3 +37,5 @@ The clock then starts its own Wi-Fi. Join it, read the IP off the panel, and put
 - AFK takes the panel when you go idle
 - A forestry event can call out while you chop
 - A level-up shows the skill and your new level
+- A **virtual clock** shows every page in a window on your desktop, for anyone without the hardware
+- Tones can be **Soft** or **Classic**, and play on the clock, on your computer, or not at all

@@ -245,7 +245,9 @@ public class CompactRenderTest
 		UlanziConfig config = new UlanziConfig()
 		{
 		};
-		AwtrixClient client = new AwtrixClient(new OkHttpClient(), config, new Gson(), new ChipPlayer(config));
+		ChipPlayer player = new ChipPlayer(config);
+		AwtrixClient client = new AwtrixClient(new OkHttpClient(), config, new Gson(), player,
+			new VirtualClock(player, config));
 		return client.compactDraw(cells);
 	}
 }

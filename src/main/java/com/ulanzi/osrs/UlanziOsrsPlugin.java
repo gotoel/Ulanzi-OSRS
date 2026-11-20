@@ -31,6 +31,7 @@ import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.events.GameObjectDespawned;
 import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.FocusChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.HitsplatApplied;
 import net.runelite.api.events.NpcDespawned;
@@ -146,6 +147,12 @@ public class UlanziOsrsPlugin extends Plugin
 	private AwtrixClient awtrixClient;
 
 	@Inject
+	private VirtualClock virtualClock;
+
+	@Inject
+	private VirtualClockWindow virtualClockWindow;
+
+	@Inject
 	private ChatMessageManager chatMessageManager;
 
 	@Inject
@@ -226,9 +233,19 @@ public class UlanziOsrsPlugin extends Plugin
 		migrateConfig();
 		awtrixClient.setMessageSink(this::postChat);
 		awtrixClient.setStatusSink(this::postStatus);
-		postStatus(config.host() == null || config.host().trim().isEmpty()
-			? "No clock address set."
-			: "Not checked yet.");
+		postStatus(connectionStatus(config.host()));
+		virtualClock.reset();
+		virtualClockWindow.apply();
+	}
+
+	/** What the status line says before anything has been sent. */
+	private String connectionStatus(String host)
+	{
+		if (config.clockOutput() == ClockOutput.VIRTUAL)
+		{
+			return "Showing on the virtual clock.";
+		}
+		return host == null || host.trim().isEmpty() ? "No clock address set." : "Not checked yet.";
 	}
 
 	@Override
@@ -236,6 +253,8 @@ public class UlanziOsrsPlugin extends Plugin
 	{
 		awtrixClient.clearAll();
 		awtrixClient.stopSound();
+		virtualClockWindow.close();
+		virtualClock.reset();
 		awtrixClient.setMessageSink(null);
 		awtrixClient.setStatusSink(null);
 		resetState();
@@ -482,7 +501,8 @@ public class UlanziOsrsPlugin extends Plugin
 
 		// Written by the plugin rather than by anyone reading the panel, so neither is a
 		// reason to redraw anything.
-		if ("status".equals(event.getKey()) || CONFIG_VERSION_KEY.equals(event.getKey()))
+		if ("status".equals(event.getKey()) || CONFIG_VERSION_KEY.equals(event.getKey())
+			|| "virtualLocation".equals(event.getKey()))
 		{
 			return;
 		}
@@ -505,9 +525,18 @@ public class UlanziOsrsPlugin extends Plugin
 
 		if ("host".equals(event.getKey()))
 		{
-			postStatus(event.getNewValue() == null || event.getNewValue().trim().isEmpty()
-				? "No clock address set."
-				: "Not checked yet.");
+			postStatus(connectionStatus(event.getNewValue()));
+		}
+
+		if ("clockOutput".equals(event.getKey()))
+		{
+			switchOutput(parseEnum(ClockOutput.class, event.getOldValue(), ClockOutput.REAL),
+				parseEnum(ClockOutput.class, event.getNewValue(), ClockOutput.REAL));
+		}
+
+		if (event.getKey().startsWith("virtual"))
+		{
+			virtualClockWindow.apply();
 		}
 
 		if ("clockVolume".equals(event.getKey()))
@@ -755,6 +784,31 @@ public class UlanziOsrsPlugin extends Plugin
 		}
 		configManager.setConfiguration(UlanziConfig.GROUP, "profile", Profile.CUSTOM);
 		postChat("Quick profile is now Custom, since you changed one of its settings.");
+	}
+
+	/**
+	 * Pages stop going to a clock that has been switched off, so it is cleared on the way out
+	 * rather than left showing the last page sent to it. A virtual clock switched on starts
+	 * empty, and the next refresh fills it.
+	 */
+	private void switchOutput(ClockOutput before, ClockOutput after)
+	{
+		if (before.toReal() && !after.toReal())
+		{
+			awtrixClient.clearRealClock();
+		}
+		if (!before.toVirtual() && after.toVirtual())
+		{
+			virtualClock.reset();
+		}
+		postStatus(connectionStatus(config.host()));
+		virtualClockWindow.apply();
+	}
+
+	@Subscribe
+	public void onFocusChanged(FocusChanged event)
+	{
+		virtualClockWindow.setClientFocused(event.isFocused());
 	}
 
 	/** The one-line answer to "is the clock there", written where the question is asked. */

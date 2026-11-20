@@ -29,30 +29,37 @@ public interface UlanziConfig extends Config
 	String connectionSection = "connection";
 
 	@ConfigSection(
+		name = "Virtual clock",
+		description = "No clock? Show the same pages in a window on your desktop instead, or as well.",
+		position = 1
+	)
+	String virtualSection = "virtual";
+
+	@ConfigSection(
 		name = "Stats",
 		description = "Hitpoints, prayer, run energy, special attack, and the activity icon.",
-		position = 1
+		position = 2
 	)
 	String statsSection = "stats";
 
 	@ConfigSection(
 		name = "Training",
 		description = "The skill page, XP per hour, and XP drops.",
-		position = 2
+		position = 3
 	)
 	String trainingSection = "training";
 
 	@ConfigSection(
 		name = "Alerts",
 		description = "Low hitpoints and prayer warnings.",
-		position = 3
+		position = 4
 	)
 	String alertsSection = "alerts";
 
 	@ConfigSection(
 		name = "AFK",
 		description = "Idle indicator.",
-		position = 4,
+		position = 5,
 		closedByDefault = true
 	)
 	String afkSection = "afk";
@@ -60,7 +67,7 @@ public interface UlanziConfig extends Config
 	@ConfigSection(
 		name = "Forestry",
 		description = "Call out a forestry event starting around you while you chop.",
-		position = 5,
+		position = 6,
 		closedByDefault = true
 	)
 	String forestrySection = "forestry";
@@ -68,7 +75,7 @@ public interface UlanziConfig extends Config
 	@ConfigSection(
 		name = "Level ups",
 		description = "Celebrate a new level on the clock.",
-		position = 6,
+		position = 7,
 		closedByDefault = true
 	)
 	String levelUpSection = "levelUps";
@@ -76,7 +83,7 @@ public interface UlanziConfig extends Config
 	@ConfigSection(
 		name = "Sound",
 		description = "Where the alert tones play, how they sound, and how loud the clock plays them.",
-		position = 7,
+		position = 8,
 		closedByDefault = true
 	)
 	String soundSection = "sound";
@@ -84,7 +91,7 @@ public interface UlanziConfig extends Config
 	@ConfigSection(
 		name = "Advanced",
 		description = "Settings worth changing once, if at all.",
-		position = 8,
+		position = 9,
 		closedByDefault = true
 	)
 	String advancedSection = "advanced";
@@ -179,6 +186,108 @@ public interface UlanziConfig extends Config
 	default int brightness()
 	{
 		return 0;
+	}
+
+	@ConfigItem(
+		keyName = "clockOutput",
+		name = "Show pages on",
+		description = "Real clock sends pages to the clock at the address above. Virtual clock shows them in a "
+			+ "window on your desktop, with nothing sent over the network. Both does the two at once.",
+		position = 0,
+		section = virtualSection
+	)
+	default ClockOutput clockOutput()
+	{
+		return ClockOutput.REAL;
+	}
+
+	@ConfigItem(
+		keyName = "virtualAlwaysOnTop",
+		name = "Always on top",
+		description = "Keep the virtual clock above every other window, the game included.",
+		position = 1,
+		section = virtualSection
+	)
+	default boolean virtualAlwaysOnTop()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "virtualOnlyWhenUnfocused",
+		name = "Only when tabbed out",
+		description = "Hide the virtual clock while RuneLite is the window you are using, and show it when you "
+			+ "switch to something else, which is when the game's own orbs are out of sight.",
+		position = 2,
+		section = virtualSection
+	)
+	default boolean virtualOnlyWhenUnfocused()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "virtualStyle",
+		name = "LED style",
+		description = "Round looks like the clock's LEDs, Square is crisp flat pixels, and Glow adds a soft halo "
+			+ "around every lit LED.",
+		position = 3,
+		section = virtualSection
+	)
+	default LedStyle virtualStyle()
+	{
+		return LedStyle.ROUND;
+	}
+
+	@ConfigItem(
+		keyName = "virtualSize",
+		name = "LED size",
+		description = "Pixels per LED. Dragging the window's bottom-right corner sets this too.",
+		position = 4,
+		section = virtualSection
+	)
+	@Range(min = VirtualClockWindow.MIN_PITCH, max = VirtualClockWindow.MAX_PITCH)
+	@Units(Units.PIXELS)
+	default int virtualSize()
+	{
+		return 10;
+	}
+
+	@ConfigItem(
+		keyName = "virtualOpacity",
+		name = "Opacity",
+		description = "How see-through the window is, from 20% to fully solid.",
+		position = 5,
+		section = virtualSection
+	)
+	@Range(min = 20, max = 100)
+	@Units(Units.PERCENT)
+	default int virtualOpacity()
+	{
+		return 100;
+	}
+
+	@ConfigItem(
+		keyName = "virtualLocked",
+		name = "Lock position",
+		description = "Stop the window being moved or resized by accident.",
+		position = 6,
+		section = virtualSection
+	)
+	default boolean virtualLocked()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "virtualLocation",
+		name = "",
+		description = "",
+		hidden = true
+	)
+	default String virtualLocation()
+	{
+		return "";
 	}
 
 	@ConfigItem(
