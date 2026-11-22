@@ -16,7 +16,7 @@ A skill page can take over with your level and XP per hour. Low hitpoints flashe
 
 ## The virtual clock
 
-It is on by default and only appears while you are logged in.
+It is on by default and only appears while you are logged in. **Quick setup** holds the few settings most people want, and everything else is folded away below it.
 
 - Drag it anywhere, and drag any edge to resize it.
 - Hover over it for **always on top**, an **opacity** slider, **more options**, and **close**. Scrolling over it changes the opacity too.
@@ -26,7 +26,7 @@ It is on by default and only appears while you are logged in.
 
 ## Connect a real clock
 
-Hover over the virtual clock, open its options, and choose **Connect a real clock**, or fill in **Clock address** in the settings. As soon as the clock answers, the virtual one steps aside. To keep both, set **Virtual clock > Show pages on** to **Both**.
+Hover over the virtual clock, open its options, and choose **Connect a real clock**, or fill in **Clock address** under **Real clock** in the settings. As soon as the clock answers, the virtual one steps aside. To keep both, set **Quick setup > Show pages on** to **Both**.
 
 ### Flash the clock
 

@@ -816,7 +816,7 @@ public class UlanziOsrsPlugin extends Plugin
 			return;
 		}
 		configManager.setConfiguration(UlanziConfig.GROUP, "profile", Profile.CUSTOM);
-		postChat("Quick profile is now Custom, since you changed one of its settings.");
+		postChat("Play style is now Custom, since you changed one of its settings.");
 	}
 
 	/**

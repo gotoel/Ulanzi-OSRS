@@ -22,44 +22,40 @@ public interface UlanziConfig extends Config
 	String GROUP = "ulanziOsrs";
 
 	@ConfigSection(
-		name = "Connection",
-		description = "Clock address, status, and how bright the panel runs.",
+		name = "Quick setup",
+		description = "The few settings most people will ever want.",
 		position = 0
 	)
-	String connectionSection = "connection";
-
-	@ConfigSection(
-		name = "Virtual clock",
-		description = "No clock? Show the same pages in a window on your desktop instead, or as well.",
-		position = 1
-	)
-	String virtualSection = "virtual";
+	String quickSection = "quick";
 
 	@ConfigSection(
 		name = "Stats",
 		description = "Hitpoints, prayer, run energy, special attack, and the activity icon.",
-		position = 2
+		position = 1,
+		closedByDefault = true
 	)
 	String statsSection = "stats";
 
 	@ConfigSection(
 		name = "Training",
 		description = "The skill page, XP per hour, and XP drops.",
-		position = 3
+		position = 2,
+		closedByDefault = true
 	)
 	String trainingSection = "training";
 
 	@ConfigSection(
 		name = "Alerts",
 		description = "Low hitpoints and prayer warnings.",
-		position = 4
+		position = 3,
+		closedByDefault = true
 	)
 	String alertsSection = "alerts";
 
 	@ConfigSection(
 		name = "AFK",
 		description = "Idle indicator.",
-		position = 5,
+		position = 4,
 		closedByDefault = true
 	)
 	String afkSection = "afk";
@@ -67,7 +63,7 @@ public interface UlanziConfig extends Config
 	@ConfigSection(
 		name = "Forestry",
 		description = "Call out a forestry event starting around you while you chop.",
-		position = 6,
+		position = 5,
 		closedByDefault = true
 	)
 	String forestrySection = "forestry";
@@ -75,7 +71,7 @@ public interface UlanziConfig extends Config
 	@ConfigSection(
 		name = "Level ups",
 		description = "Celebrate a new level on the clock.",
-		position = 7,
+		position = 6,
 		closedByDefault = true
 	)
 	String levelUpSection = "levelUps";
@@ -83,27 +79,44 @@ public interface UlanziConfig extends Config
 	@ConfigSection(
 		name = "Sound",
 		description = "Where the alert tones play, how they sound, and how loud the clock plays them.",
-		position = 8,
+		position = 7,
 		closedByDefault = true
 	)
 	String soundSection = "sound";
 
 	@ConfigSection(
+		name = "Virtual clock",
+		description = "When the clock on your desktop shows. Hover over it for its look and size.",
+		position = 8,
+		closedByDefault = true
+	)
+	String virtualSection = "virtual";
+
+	@ConfigSection(
+		name = "Real clock",
+		description = "Only for an Ulanzi TC001: its address, login, and brightness.",
+		position = 9,
+		closedByDefault = true
+	)
+	String connectionSection = "connection";
+
+	@ConfigSection(
 		name = "Advanced",
 		description = "Settings worth changing once, if at all.",
-		position = 9,
+		position = 10,
 		closedByDefault = true
 	)
 	String advancedSection = "advanced";
 
 	@ConfigItem(
 		keyName = "profile",
-		name = "Quick profile",
+		name = "Play style",
 		description = "Sets the panel up for one kind of play. Combat keeps hitpoints and prayer on the line; "
 			+ "Skilling puts the skill you are training and its XP/h up and keeps them through a fight; Hybrid shows "
 			+ "the skill page while skilling and the combat line while fighting. Picking one "
 			+ "fills in the settings below, and changing any of those puts this back to Custom.",
-		position = 0
+		position = 0,
+		section = quickSection
 	)
 	default Profile profile()
 	{
@@ -166,8 +179,8 @@ public interface UlanziConfig extends Config
 		name = "Preview",
 		description = "Put a page on the clock with sample readings, so a layout can be judged without playing. "
 			+ "Works while you are logged out, and turns itself back off.",
-		position = 4,
-		section = connectionSection
+		position = 6,
+		section = quickSection
 	)
 	default Preview preview()
 	{
@@ -191,10 +204,10 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "clockOutput",
 		name = "Show pages on",
-		description = "Automatic uses the virtual clock until a real clock answers at the address above, then "
+		description = "Automatic uses the virtual clock until a real clock answers at its address, then "
 			+ "switches to the real one. Virtual clock and Real clock stay on that one. Both shows the two at once.",
-		position = 0,
-		section = virtualSection
+		position = 1,
+		section = quickSection
 	)
 	default ClockOutput clockOutput()
 	{
@@ -243,7 +256,8 @@ public interface UlanziConfig extends Config
 		name = "LED style",
 		description = "Square matches the real clock's panel. Round draws dots, with the unlit ones faintly showing.",
 		position = 4,
-		section = virtualSection
+		section = virtualSection,
+		hidden = true
 	)
 	default LedStyle virtualStyle()
 	{
@@ -255,7 +269,8 @@ public interface UlanziConfig extends Config
 		name = "LED size",
 		description = "Pixels per LED. Dragging any edge of the window sets this too.",
 		position = 5,
-		section = virtualSection
+		section = virtualSection,
+		hidden = true
 	)
 	@Range(min = VirtualClockWindow.MIN_PITCH, max = VirtualClockWindow.MAX_PITCH)
 	@Units(Units.PIXELS)
@@ -269,7 +284,8 @@ public interface UlanziConfig extends Config
 		name = "Opacity",
 		description = "How see-through the window is, from 20% to fully solid. Scrolling over the window sets this too.",
 		position = 6,
-		section = virtualSection
+		section = virtualSection,
+		hidden = true
 	)
 	@Range(min = 20, max = 100)
 	@Units(Units.PERCENT)
@@ -283,7 +299,8 @@ public interface UlanziConfig extends Config
 		name = "Lock position",
 		description = "Stop the window being moved or resized by accident.",
 		position = 7,
-		section = virtualSection
+		section = virtualSection,
+		hidden = true
 	)
 	default boolean virtualLocked()
 	{
@@ -295,7 +312,8 @@ public interface UlanziConfig extends Config
 		name = "When idle, show",
 		description = "What the virtual clock shows when no page is up, such as with stats switched off.",
 		position = 8,
-		section = virtualSection
+		section = virtualSection,
+		hidden = true
 	)
 	default IdleDisplay virtualIdle()
 	{
@@ -307,7 +325,8 @@ public interface UlanziConfig extends Config
 		name = "Time format",
 		description = "How the time reads when When idle, show is Time. System follows your computer's region.",
 		position = 9,
-		section = virtualSection
+		section = virtualSection,
+		hidden = true
 	)
 	default TimeFormat virtualTimeFormat()
 	{
@@ -353,8 +372,8 @@ public interface UlanziConfig extends Config
 		description = "Clock plays tones on the clock's buzzer. Computer plays them through your speakers instead, "
 			+ "in a soft voice, and works without a clock. Off silences every tone at once, whatever the alerts are "
 			+ "set to.",
-		position = 0,
-		section = soundSection
+		position = 5,
+		section = quickSection
 	)
 	default SoundOutput soundOutput()
 	{
@@ -418,8 +437,8 @@ public interface UlanziConfig extends Config
 		name = "Layout",
 		description = "Big shows one large stat at a time, rotating. Compact shows every stat on one line over a "
 			+ "strip of bars. Focus shows whichever stat changed last in large digits and keeps the rest on the strip.",
-		position = 1,
-		section = statsSection
+		position = 2,
+		section = quickSection
 	)
 	default StatsLayout statsLayout()
 	{
@@ -700,8 +719,8 @@ public interface UlanziConfig extends Config
 		name = "Low hitpoints",
 		description = "What happens when hitpoints reach the threshold below. Flash follows Alert display; Beep is "
 			+ "the clock's buzzer.",
-		position = 2,
-		section = alertsSection
+		position = 3,
+		section = quickSection
 	)
 	default AlertStyle lowHitpoints()
 	{
@@ -820,8 +839,8 @@ public interface UlanziConfig extends Config
 		description = "Show AFK when you go idle. Off by default. Walking, running, or clicking to move clears it; "
 			+ "moving the mouse does not. A pause between swings on a wall rock, such as a Motherlode vein, "
 			+ "does not count.",
-		position = 0,
-		section = afkSection
+		position = 4,
+		section = quickSection
 	)
 	default boolean afkEnabled()
 	{
