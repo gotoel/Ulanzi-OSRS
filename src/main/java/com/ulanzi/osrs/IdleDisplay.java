@@ -3,7 +3,7 @@ package com.ulanzi.osrs;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
-/** What the virtual clock shows when no page is up. */
+/** What the virtual overlay shows when no page is up. */
 @Getter
 @AllArgsConstructor
 public enum IdleDisplay

@@ -4,7 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The virtual clock's text, drawn to the same measure as the clock's own fonts so a page
+ * The virtual overlay's text, drawn to the same measure as the clock's own fonts so a page
  * laid out for the clock lands in the same place: every glyph three columns wide on a
  * four-pixel advance, a space two pixels, and no trailing column.
  *

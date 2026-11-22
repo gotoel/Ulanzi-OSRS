@@ -34,7 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.config.ConfigManager;
 
 /**
- * The virtual clock on screen: a small borderless window of LEDs that can be dragged
+ * The virtual overlay on screen: a small borderless window of LEDs that can be dragged
  * anywhere and resized from any edge. Its few controls stay out of sight until the mouse is
  * over it.
  *
@@ -68,7 +68,7 @@ class VirtualClockWindow
 		PIN("Always on top"),
 		OPACITY("Opacity"),
 		MENU("More options"),
-		CLOSE("Close clock");
+		CLOSE("Close overlay");
 
 		/** What the button does, written on the clock while the mouse is over it. */
 		final String help;
@@ -187,7 +187,7 @@ class VirtualClockWindow
 	{
 		panel = new LedPanel();
 		panel.attach(clock);
-		frame = new JFrame("Ulanzi OSRS virtual clock");
+		frame = new JFrame("Ulanzi OSRS virtual overlay");
 		frame.setUndecorated(true);
 		frame.setType(Window.Type.UTILITY);
 		frame.setFocusableWindowState(false);
@@ -241,7 +241,7 @@ class VirtualClockWindow
 		}
 		catch (RuntimeException ex)
 		{
-			log.debug("The virtual clock's opacity could not be set", ex);
+			log.debug("The virtual overlay's opacity could not be set", ex);
 		}
 	}
 
@@ -412,7 +412,8 @@ class VirtualClockWindow
 	{
 		Object answer = JOptionPane.showInputDialog(null,
 			"The clock's IP address, shown on its panel. For example 192.168.1.50.\n"
-				+ "Your hitpoints, prayer, run energy, special attack, and skill progress are sent to this address.",
+				+ "Your hitpoints, prayer, run energy, special attack, and skill progress are sent to this address.\n\n"
+				+ UlanziConfig.ADDRESS_WARNING + ".",
 			"Connect a real clock", JOptionPane.PLAIN_MESSAGE, null, null, config.host());
 		if (answer != null)
 		{

@@ -42,7 +42,7 @@ class VirtualClock
 	private static final long ICON_MS = 4_000L;
 	private static final double QUIET_CYCLE_MS = 3_600.0;
 
-	/** What the virtual clock answers, in the shape of an HTTP reply. */
+	/** What the virtual overlay answers, in the shape of an HTTP reply. */
 	static final class Reply
 	{
 		final int code;
@@ -218,7 +218,7 @@ class VirtualClock
 			if ("GET".equals(method) && "/api/v1/device".equals(path))
 			{
 				JsonObject device = new JsonObject();
-				device.addProperty("hostname", "the virtual clock");
+				device.addProperty("hostname", "the virtual overlay");
 				device.addProperty("brightness", brightness);
 				return new Reply(200, device.toString());
 			}
@@ -362,7 +362,7 @@ class VirtualClock
 
 	/**
 	 * A notification goes on screen, and its tone plays, here on the computer. When tones
-	 * already go to the computer directly the virtual clock stays quiet, so none is heard twice.
+	 * already go to the computer directly the virtual overlay stays quiet, so none is heard twice.
 	 */
 	private void begin(Notification notification, long now)
 	{

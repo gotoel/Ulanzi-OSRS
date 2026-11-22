@@ -1,8 +1,10 @@
 # Ulanzi OSRS Clock
 
-**No hardware needed.** Turn the plugin on and a small LED clock appears on your desktop, showing your hitpoints, prayer, run energy, special attack, and when you have gone AFK. Keep it beside whatever else you are doing and you will see the moment your character needs you.
+**No hardware needed.** Turn the plugin on and a small LED overlay appears on your desktop, showing your hitpoints, prayer, run energy, special attack, and when you have gone AFK. Keep it beside whatever else you are doing and you will see the moment your character needs you.
 
-![The virtual clock](docs/gallery/virtual-clock.png)
+![The virtual overlay showing live stats](docs/gallery/overlay-stats.png)
+
+![The overlay when you go AFK](docs/gallery/overlay-afk.png)
 
 If you own an [Ulanzi TC001](https://github.com/rroels/ulanzi_tc001_hardware) pixel clock running [AWTRIX NG](https://blueforcer.github.io/awtrix-ng/), the plugin can drive that instead, with the same pages.
 
@@ -14,7 +16,7 @@ A skill page can take over with your level and XP per hour. Low hitpoints flashe
 
 ![Bar toward the next level](docs/gallery/skill-bar.gif)
 
-## The virtual clock
+## The virtual overlay
 
 It is on by default and only appears while you are logged in. **Quick setup** holds the few settings most people want, and everything else is folded away below it.
 
@@ -26,7 +28,7 @@ It is on by default and only appears while you are logged in. **Quick setup** ho
 
 ## Connect a real clock
 
-Hover over the virtual clock, open its options, and choose **Connect a real clock**, or fill in **Clock address** under **Real clock** in the settings. As soon as the clock answers, the virtual one steps aside. To keep both, set **Quick setup > Show pages on** to **Both**.
+Hover over the virtual overlay, open its options, and choose **Connect a real clock**, or fill in **Clock address** under **Real clock (Ulanzi TC001)** in the settings. As soon as the clock answers, the overlay steps aside. To keep both, set **Quick setup > Show pages on** to **Both**.
 
 ### Flash the clock
 
@@ -44,5 +46,5 @@ The clock then starts its own Wi-Fi. Join it, read the IP off the panel, and put
 - AFK takes the panel when you go idle
 - A forestry event can call out while you chop
 - A level-up shows the skill and your new level
-- Works **without any hardware**, through a virtual clock on your desktop
+- Works **without any hardware**, through a virtual overlay on your desktop
 - Tones can be **Soft** or **Classic**, and play on the clock, on your computer, or not at all

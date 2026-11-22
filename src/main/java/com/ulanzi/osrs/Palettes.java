@@ -10,7 +10,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Colour palettes for the virtual clock: the clock's eight named ones, or a list of colours
+ * Colour palettes for the virtual overlay: the clock's eight named ones, or a list of colours
  * sent with the page. The clock does not publish the colours behind its names, so these are
  * close matches drawn from the descriptions in its documentation.
  */

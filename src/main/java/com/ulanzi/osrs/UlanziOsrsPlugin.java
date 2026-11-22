@@ -55,8 +55,8 @@ import net.runelite.client.plugins.xptracker.XpTrackerService;
 @Slf4j
 @PluginDescriptor(
 	name = "Ulanzi OSRS Clock",
-	description = "A little LED clock on your desktop for stats, alerts, and AFK. No hardware needed, and it can drive an Ulanzi TC001",
-	tags = {"afk", "idle", "indicator", "hitpoints", "prayer", "skilling", "clock", "virtual", "led", "ulanzi", "awtrix"}
+	description = "A small LED overlay on your desktop for stats, alerts, and AFK. No hardware needed, and it can drive an Ulanzi TC001 too",
+	tags = {"afk", "idle", "indicator", "hitpoints", "prayer", "skilling", "clock", "virtual", "overlay", "led", "ulanzi", "awtrix"}
 )
 @PluginDependency(XpTrackerPlugin.class)
 public class UlanziOsrsPlugin extends Plugin
@@ -255,13 +255,13 @@ public class UlanziOsrsPlugin extends Plugin
 		ClockOutput configured = config.clockOutput();
 		if (configured == ClockOutput.VIRTUAL)
 		{
-			return "Showing on the virtual clock.";
+			return "Showing on the virtual overlay.";
 		}
 		if (configured == ClockOutput.AUTO)
 		{
 			if (noAddress)
 			{
-				return "No clock needed. Showing the virtual clock.";
+				return "No clock needed. Showing the virtual overlay.";
 			}
 			if (awtrixClient.isClockConfirmed())
 			{
@@ -269,7 +269,7 @@ public class UlanziOsrsPlugin extends Plugin
 			}
 			return awtrixClient.isLookingForClock()
 				? "Looking for the clock..."
-				: "Clock not answering. Showing the virtual clock.";
+				: "Clock not answering. Showing the virtual overlay.";
 		}
 		return noAddress ? "No clock address set." : "Not checked yet.";
 	}
@@ -821,7 +821,7 @@ public class UlanziOsrsPlugin extends Plugin
 
 	/**
 	 * Pages stop going to a clock that has been switched off, so it is cleared on the way out
-	 * rather than left showing the last page sent to it. A virtual clock switched on or off
+	 * rather than left showing the last page sent to it. A virtual overlay switched on or off
 	 * starts empty, and the next refresh fills whichever is now in use.
 	 */
 	private void syncOutput()
@@ -851,7 +851,7 @@ public class UlanziOsrsPlugin extends Plugin
 		configManager.setConfiguration(UlanziConfig.GROUP, "confirmedClock", address);
 		if (config.clockOutput() == ClockOutput.AUTO)
 		{
-			postChat("Clock connected, so the virtual clock is hidden. Set Show pages on to Both to keep it too.");
+			postChat("Clock connected, so the virtual overlay is hidden. Set Show pages on to Both to keep it too.");
 		}
 	}
 
@@ -864,7 +864,7 @@ public class UlanziOsrsPlugin extends Plugin
 	private void closeVirtualClock()
 	{
 		configManager.setConfiguration(UlanziConfig.GROUP, "clockOutput", ClockOutput.REAL);
-		postChat("Virtual clock closed. Set Show pages on to Automatic to bring it back.");
+		postChat("Virtual overlay closed. Set Show pages on to Automatic to bring it back.");
 	}
 
 	private static boolean isInGame(GameState state)
@@ -916,7 +916,7 @@ public class UlanziOsrsPlugin extends Plugin
 		if (state == GameState.LOGGED_IN && !config.virtualIntroduced())
 		{
 			configManager.setConfiguration(UlanziConfig.GROUP, "virtualIntroduced", true);
-			postChat("No hardware needed: the virtual clock shows your stats and AFK status. Right-click it to connect a real clock.");
+			postChat("No hardware needed: the virtual overlay shows your stats and AFK status. Right-click it to connect a real clock.");
 		}
 		if (state == GameState.LOGIN_SCREEN
 			|| state == GameState.LOGIN_SCREEN_AUTHENTICATOR)

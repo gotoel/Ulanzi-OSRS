@@ -20,6 +20,7 @@ import net.runelite.client.config.Units;
 public interface UlanziConfig extends Config
 {
 	String GROUP = "ulanziOsrs";
+	String ADDRESS_WARNING = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers";
 
 	@ConfigSection(
 		name = "Quick setup",
@@ -85,15 +86,15 @@ public interface UlanziConfig extends Config
 	String soundSection = "sound";
 
 	@ConfigSection(
-		name = "Virtual clock",
-		description = "When the clock on your desktop shows. Hover over it for its look and size.",
+		name = "Virtual overlay",
+		description = "When the overlay on your desktop shows. Hover over it for its look and size.",
 		position = 8,
 		closedByDefault = true
 	)
 	String virtualSection = "virtual";
 
 	@ConfigSection(
-		name = "Real clock",
+		name = "Real clock (Ulanzi TC001)",
 		description = "Only for an Ulanzi TC001: its address, login, and brightness.",
 		position = 9,
 		closedByDefault = true
@@ -128,7 +129,7 @@ public interface UlanziConfig extends Config
 		name = "Clock address",
 		description = "IP or hostname of the AWTRIX NG clock, with a port if it needs one. For example 192.168.1.50. "
 			+ "Nothing is sent until this is set. Hitpoints, prayer, run energy, special attack, and skill progress go there.",
-		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
+		warning = ADDRESS_WARNING,
 		position = 0,
 		section = connectionSection
 	)
@@ -204,8 +205,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "clockOutput",
 		name = "Show pages on",
-		description = "Automatic uses the virtual clock until a real clock answers at its address, then "
-			+ "switches to the real one. Virtual clock and Real clock stay on that one. Both shows the two at once.",
+		description = "Automatic uses the virtual overlay until a real clock answers at its address, then "
+			+ "switches to the clock. Virtual overlay and Real clock stay on that one. Both shows the two at once.",
 		position = 1,
 		section = quickSection
 	)
@@ -217,7 +218,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "virtualHideLoggedOut",
 		name = "Hide when logged out",
-		description = "Keep the virtual clock off your screen unless you are logged in.",
+		description = "Keep the virtual overlay off your screen unless you are logged in.",
 		position = 1,
 		section = virtualSection
 	)
@@ -229,7 +230,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "virtualAlwaysOnTop",
 		name = "Always on top",
-		description = "Keep the virtual clock above every other window, the game included.",
+		description = "Keep the virtual overlay above every other window, the game included.",
 		position = 3,
 		section = virtualSection
 	)
@@ -241,7 +242,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "virtualOnlyWhenUnfocused",
 		name = "Only when tabbed out",
-		description = "Hide the virtual clock while RuneLite is the window you are using, and show it when you "
+		description = "Hide the virtual overlay while RuneLite is the window you are using, and show it when you "
 			+ "switch to something else, which is when the game's own orbs are out of sight.",
 		position = 2,
 		section = virtualSection
@@ -310,7 +311,7 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "virtualIdle",
 		name = "When idle, show",
-		description = "What the virtual clock shows when no page is up, such as with stats switched off.",
+		description = "What the virtual overlay shows when no page is up, such as with stats switched off.",
 		position = 8,
 		section = virtualSection,
 		hidden = true

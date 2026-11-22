@@ -18,7 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.w3c.dom.Node;
 
 /**
- * An icon as the virtual clock draws it: a base64 GIF (or JPEG), with or without a
+ * An icon as the virtual overlay draws it: a base64 GIF (or JPEG), with or without a
  * "data:image/...;base64," prefix, decoded into whole frames and their timings. Animated
  * GIFs loop, the way the clock plays them.
  */
@@ -134,7 +134,7 @@ final class GifIcon
 		}
 		catch (IllegalArgumentException ex)
 		{
-			// An icon id rather than data: the virtual clock has no icon store to look it up in.
+			// An icon id rather than data: the virtual overlay has no icon store to look it up in.
 			return NONE;
 		}
 
@@ -163,7 +163,7 @@ final class GifIcon
 		}
 		catch (IOException | RuntimeException ex)
 		{
-			log.debug("Could not decode an icon for the virtual clock", ex);
+			log.debug("Could not decode an icon for the virtual overlay", ex);
 			return NONE;
 		}
 	}

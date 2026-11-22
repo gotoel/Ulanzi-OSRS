@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * Where the pages go. Automatic is the default: the virtual clock, until a real clock has
+ * Where the pages go. Automatic is the default: the virtual overlay, until a real clock has
  * answered at the saved address, and from then on the real one alone.
  */
 @Getter
@@ -12,8 +12,8 @@ import lombok.Getter;
 public enum ClockOutput
 {
 	AUTO("Automatic"),
-	VIRTUAL("Virtual clock"),
-	REAL("Real clock"),
+	VIRTUAL("Virtual overlay"),
+	REAL("Real clock (TC001)"),
 	BOTH("Both");
 
 	private final String name;
