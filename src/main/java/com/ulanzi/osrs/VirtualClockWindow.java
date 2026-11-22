@@ -68,13 +68,14 @@ class VirtualClockWindow
 		PIN("Always on top"),
 		OPACITY("Opacity"),
 		MENU("More options"),
-		CLOSE("Close the virtual clock");
+		CLOSE("Close clock");
 
-		final String tip;
+		/** What the button does, written on the clock while the mouse is over it. */
+		final String help;
 
-		Control(String tip)
+		Control(String help)
 		{
-			this.tip = tip;
+			this.help = help;
 		}
 	}
 
@@ -679,6 +680,7 @@ class VirtualClockWindow
 		private static final Color CLOSE_HOVER = new Color(0xC8, 0x3C, 0x32);
 		private static final Color TRACK = new Color(0x58, 0x58, 0x58);
 		private static final int SLIDER_PAD = 8;
+		private static final int HELP_PAD = 6;
 		private static final int SLIDER_LABEL = 28;
 
 		private final int[] frame = Frame.blank();
@@ -697,7 +699,6 @@ class VirtualClockWindow
 		LedPanel()
 		{
 			setOpaque(true);
-			setToolTipText("");
 		}
 
 		void attach(VirtualClock clock)
@@ -836,13 +837,6 @@ class VirtualClockWindow
 		}
 
 		@Override
-		public String getToolTipText(MouseEvent event)
-		{
-			Control control = controlAt(event.getPoint());
-			return control == null ? null : control.tip;
-		}
-
-		@Override
 		public Dimension getPreferredSize()
 		{
 			return sizeFor(pitch);
@@ -942,6 +936,39 @@ class VirtualClockWindow
 			{
 				paintSlider(g);
 			}
+			else if (hovered != null)
+			{
+				paintHelp(g);
+			}
+		}
+
+		/**
+		 * Names the button under the mouse. Painted rather than a tooltip, because Swing does
+		 * not reliably show tooltips on a window that never takes focus.
+		 */
+		private void paintHelp(Graphics2D g)
+		{
+			Rectangle first = buttonBounds(Control.PIN);
+			g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+			g.setFont(g.getFont().deriveFont(java.awt.Font.PLAIN, 11f));
+			java.awt.FontMetrics metrics = g.getFontMetrics();
+			int room = first.x - EDGE - 3;
+			String text = hovered.help;
+			if (hovered == Control.PIN)
+			{
+				String state = pinned ? ": on" : ": off";
+				text = metrics.stringWidth(text + state) + 2 * HELP_PAD <= room ? text + state : "On top" + state;
+			}
+			else if (hovered == Control.MENU && metrics.stringWidth(text) + 2 * HELP_PAD > room)
+			{
+				text = "Options";
+			}
+			int width = metrics.stringWidth(text) + 2 * HELP_PAD;
+			int x = first.x - width - 2;
+			g.setColor(PILL);
+			g.fillRoundRect(x, first.y, width, first.height, 6, 6);
+			g.setColor(Color.WHITE);
+			g.drawString(text, x + HELP_PAD, first.y + (first.height + metrics.getAscent() - metrics.getDescent()) / 2);
 		}
 
 		private void paintSlider(Graphics2D g)
