@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.util.concurrent.atomic.AtomicLong;
 import okhttp3.OkHttpClient;
 import org.junit.Assert;
@@ -24,6 +25,12 @@ public class VirtualClockTest
 		public SoundOutput soundOutput()
 		{
 			return SoundOutput.OFF;
+		}
+
+		@Override
+		public IdleDisplay virtualIdle()
+		{
+			return IdleDisplay.TIME;
 		}
 	};
 	private final ChipPlayer player = new ChipPlayer(config);
@@ -248,6 +255,55 @@ public class VirtualClockTest
 			Assert.assertTrue("no glyph for " + c, PixelFont.known(c));
 		}
 		Assert.assertEquals(XpDropGif.textWidth("+1 234"), PixelFont.width("+1 234"));
+	}
+
+	@Test
+	public void automaticIsVirtualUntilAClockHasAnswered()
+	{
+		Assert.assertEquals(ClockOutput.VIRTUAL, ClockOutput.AUTO.resolve(false, false));
+		Assert.assertEquals(ClockOutput.VIRTUAL, ClockOutput.AUTO.resolve(true, false));
+		Assert.assertEquals(ClockOutput.REAL, ClockOutput.AUTO.resolve(true, true));
+		Assert.assertEquals(ClockOutput.BOTH, ClockOutput.BOTH.resolve(true, true));
+		Assert.assertEquals(ClockOutput.VIRTUAL, ClockOutput.VIRTUAL.resolve(true, true));
+		Assert.assertEquals(ClockOutput.AUTO, new UlanziConfig()
+		{
+		}.clockOutput());
+	}
+
+	@Test
+	public void timeReadsInTwelveOrTwentyFourHours()
+	{
+		java.time.LocalTime afternoon = java.time.LocalTime.of(14, 5);
+		java.time.LocalTime midnight = java.time.LocalTime.of(0, 7);
+		Assert.assertEquals("2:05PM", VirtualClock.formatTime(afternoon, TimeFormat.H12, java.util.Locale.UK));
+		Assert.assertEquals("12:07AM", VirtualClock.formatTime(midnight, TimeFormat.H12, java.util.Locale.UK));
+		Assert.assertEquals("14:05", VirtualClock.formatTime(afternoon, TimeFormat.H24, java.util.Locale.US));
+		Assert.assertTrue(PixelFont.width("12:59PM") <= Frame.WIDTH);
+	}
+
+	@Test
+	public void resizingSnapsToWholeLedsAndFindsTheEdges()
+	{
+		Dimension ten = VirtualClockWindow.LedPanel.sizeFor(10);
+		Assert.assertEquals(10, VirtualClockWindow.pitchForLength(ten.width, Frame.WIDTH));
+		Assert.assertEquals(10, VirtualClockWindow.pitchForLength(ten.height, Frame.HEIGHT));
+		Assert.assertEquals(VirtualClockWindow.MIN_PITCH, VirtualClockWindow.pitchForLength(1, Frame.WIDTH));
+		Assert.assertEquals(VirtualClockWindow.MAX_PITCH, VirtualClockWindow.pitchForLength(99_999, Frame.WIDTH));
+		Assert.assertEquals(VirtualClockWindow.LEFT | VirtualClockWindow.TOP,
+			VirtualClockWindow.edgesAt(1, 1, 300, 80));
+		Assert.assertEquals(VirtualClockWindow.RIGHT, VirtualClockWindow.edgesAt(298, 40, 300, 80));
+		Assert.assertEquals(0, VirtualClockWindow.edgesAt(150, 40, 300, 80));
+	}
+
+	@Test
+	public void lowercaseKeepsItsNumberSuffixes()
+	{
+		Assert.assertTrue(PixelFont.known('k'));
+		int[] lower = Frame.blank();
+		int[] upper = Frame.blank();
+		PixelFont.draw(lower, "k", 0, 1, false, (x, i) -> 1, 0, Frame.WIDTH);
+		PixelFont.draw(upper, "K", 0, 1, false, (x, i) -> 1, 0, Frame.WIDTH);
+		Assert.assertFalse(java.util.Arrays.equals(lower, upper));
 	}
 
 	private void pushApp(String color, String text)

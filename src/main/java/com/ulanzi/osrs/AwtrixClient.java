@@ -67,6 +67,11 @@ public class AwtrixClient
 	private final ChipPlayer chipPlayer;
 	private final VirtualClock virtualClock;
 	private final ThreadLocal<ClockOutput> pinnedOutput = new ThreadLocal<>();
+	private final AtomicBoolean probing = new AtomicBoolean(false);
+	/** The address that last failed to answer as a clock, so the virtual one can stop waiting on it. */
+	private final AtomicReference<String> missingAddress = new AtomicReference<>();
+	private volatile Consumer<String> clockFound = address -> { };
+	private volatile Runnable clockMissing = () -> { };
 
 	private final AtomicReference<String> lastStatsBody = new AtomicReference<>();
 	private final AtomicReference<String> lastAfkBody = new AtomicReference<>();
@@ -409,6 +414,11 @@ public class AwtrixClient
 				send("GET", "/api/v1/device", null, true, device ->
 				{
 					String name = device.ok ? hostname(device.body) : null;
+					String base = baseUrl();
+					if (name != null && base != null && configuredOutput() != ClockOutput.VIRTUAL)
+					{
+						clockFound.accept(base);
+					}
 					messages.accept(name == null ? "Connected to the clock." : "Connected to " + name + ".");
 					status(name == null ? "Connected." : "Connected to " + name + ".");
 				});
@@ -1906,8 +1916,66 @@ public class AwtrixClient
 		{
 			return pinned;
 		}
+		return configuredOutput().resolve(baseUrl() != null, isClockConfirmed());
+	}
+
+	private ClockOutput configuredOutput()
+	{
 		ClockOutput configured = config.clockOutput();
-		return configured == null ? ClockOutput.REAL : configured;
+		return configured == null ? ClockOutput.AUTO : configured;
+	}
+
+	/** A real clock has answered at the address now saved. */
+	boolean isClockConfirmed()
+	{
+		String base = baseUrl();
+		return base != null && base.equals(config.confirmedClock());
+	}
+
+	/**
+	 * On Automatic with an address saved, and still finding out whether a clock is there.
+	 * The virtual window stays down meanwhile, so someone with a clock never sees it flash up.
+	 */
+	boolean isLookingForClock()
+	{
+		String base = baseUrl();
+		return configuredOutput() == ClockOutput.AUTO && base != null && !isClockConfirmed()
+			&& !base.equals(missingAddress.get());
+	}
+
+	/** Where to hear that a clock was found at an address, or that the saved one did not answer. */
+	void setClockListener(Consumer<String> found, Runnable missing)
+	{
+		clockFound = found == null ? address -> { } : found;
+		clockMissing = missing == null ? () -> { } : missing;
+		missingAddress.set(null);
+	}
+
+	/**
+	 * Asks the saved address whether it is a clock, while Automatic is still waiting on one.
+	 * Only the device's identity is requested, so no stats go anywhere until a clock answers.
+	 */
+	void probeClock()
+	{
+		String base = baseUrl();
+		if (base == null || configuredOutput() != ClockOutput.AUTO || isClockConfirmed()
+			|| !probing.compareAndSet(false, true))
+		{
+			return;
+		}
+		send("GET", "/api/v1/device", null, true, result ->
+		{
+			probing.set(false);
+			if (result.ok && hostname(result.body) != null)
+			{
+				missingAddress.set(null);
+				clockFound.accept(base);
+			}
+			else if (!base.equals(missingAddress.getAndSet(base)))
+			{
+				clockMissing.run();
+			}
+		});
 	}
 
 	/** Clears the real clock alone, for when the pages stop going to it. */
@@ -1926,13 +1994,14 @@ public class AwtrixClient
 
 	private void send(String method, String path, String jsonBody, boolean test, Consumer<Result> done)
 	{
-		ClockOutput output = output();
+		// A connection test is a question about the real clock, whatever is showing the pages.
+		boolean testsReal = test && baseUrl() != null && configuredOutput() != ClockOutput.VIRTUAL;
+		ClockOutput output = testsReal ? ClockOutput.REAL : output();
 		if (output.toVirtual())
 		{
 			VirtualClock.Reply reply = virtualClock.handle(method, path, jsonBody);
 			if (!output.toReal())
 			{
-				status("Showing on the virtual clock.");
 				if (done != null)
 				{
 					done.accept(reply.ok() ? Result.ok(reply.body) : Result.answered("HTTP " + reply.code));

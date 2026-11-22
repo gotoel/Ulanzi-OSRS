@@ -55,8 +55,8 @@ import net.runelite.client.plugins.xptracker.XpTrackerService;
 @Slf4j
 @PluginDescriptor(
 	name = "Ulanzi OSRS Clock",
-	description = "Shows AFK status, combat stats, and skilling activity on an AWTRIX NG Ulanzi TC001",
-	tags = {"ulanzi", "awtrix", "afk", "hitpoints", "prayer", "skilling", "clock"}
+	description = "A little LED clock on your desktop for stats, alerts, and AFK. No hardware needed, and it can drive an Ulanzi TC001",
+	tags = {"afk", "idle", "indicator", "hitpoints", "prayer", "skilling", "clock", "virtual", "led", "ulanzi", "awtrix"}
 )
 @PluginDependency(XpTrackerPlugin.class)
 public class UlanziOsrsPlugin extends Plugin
@@ -152,6 +152,11 @@ public class UlanziOsrsPlugin extends Plugin
 	@Inject
 	private VirtualClockWindow virtualClockWindow;
 
+	private static final long CLOCK_PROBE_SECONDS = 15L;
+	private volatile ScheduledFuture<?> clockProbe;
+	private volatile ClockOutput appliedOutput;
+	private volatile boolean inGame;
+
 	@Inject
 	private ChatMessageManager chatMessageManager;
 
@@ -233,26 +238,55 @@ public class UlanziOsrsPlugin extends Plugin
 		migrateConfig();
 		awtrixClient.setMessageSink(this::postChat);
 		awtrixClient.setStatusSink(this::postStatus);
+		inGame = isInGame(client.getGameState());
+		appliedOutput = awtrixClient.output();
+		awtrixClient.setClockListener(this::clockFound, this::clockMissing);
+		virtualClockWindow.setCloseHandler(this::closeVirtualClock);
 		postStatus(connectionStatus(config.host()));
 		virtualClock.reset();
-		virtualClockWindow.apply();
+		updateWindow();
+		clockProbe = executor.scheduleWithFixedDelay(awtrixClient::probeClock, 0L, CLOCK_PROBE_SECONDS, TimeUnit.SECONDS);
 	}
 
 	/** What the status line says before anything has been sent. */
 	private String connectionStatus(String host)
 	{
-		if (config.clockOutput() == ClockOutput.VIRTUAL)
+		boolean noAddress = host == null || host.trim().isEmpty();
+		ClockOutput configured = config.clockOutput();
+		if (configured == ClockOutput.VIRTUAL)
 		{
 			return "Showing on the virtual clock.";
 		}
-		return host == null || host.trim().isEmpty() ? "No clock address set." : "Not checked yet.";
+		if (configured == ClockOutput.AUTO)
+		{
+			if (noAddress)
+			{
+				return "No clock needed. Showing the virtual clock.";
+			}
+			if (awtrixClient.isClockConfirmed())
+			{
+				return "Connected.";
+			}
+			return awtrixClient.isLookingForClock()
+				? "Looking for the clock..."
+				: "Clock not answering. Showing the virtual clock.";
+		}
+		return noAddress ? "No clock address set." : "Not checked yet.";
 	}
 
 	@Override
 	protected void shutDown()
 	{
+		ScheduledFuture<?> probe = clockProbe;
+		if (probe != null)
+		{
+			probe.cancel(false);
+			clockProbe = null;
+		}
 		awtrixClient.clearAll();
 		awtrixClient.stopSound();
+		awtrixClient.setClockListener(null, null);
+		virtualClockWindow.setCloseHandler(null);
 		virtualClockWindow.close();
 		virtualClock.reset();
 		awtrixClient.setMessageSink(null);
@@ -501,9 +535,15 @@ public class UlanziOsrsPlugin extends Plugin
 
 		// Written by the plugin rather than by anyone reading the panel, so neither is a
 		// reason to redraw anything.
-		if ("status".equals(event.getKey()) || CONFIG_VERSION_KEY.equals(event.getKey())
-			|| "virtualLocation".equals(event.getKey()))
+		if ("status".equals(event.getKey()) || CONFIG_VERSION_KEY.equals(event.getKey()))
 		{
+			return;
+		}
+
+		// All about the window, so none of them is a reason to resend a page.
+		if (event.getKey().startsWith("virtual"))
+		{
+			updateWindow();
 			return;
 		}
 
@@ -523,20 +563,11 @@ public class UlanziOsrsPlugin extends Plugin
 
 		leaveProfileIfChanged(event.getKey(), event.getNewValue());
 
-		if ("host".equals(event.getKey()))
+		if ("host".equals(event.getKey()) || "clockOutput".equals(event.getKey())
+			|| "confirmedClock".equals(event.getKey()))
 		{
-			postStatus(connectionStatus(event.getNewValue()));
-		}
-
-		if ("clockOutput".equals(event.getKey()))
-		{
-			switchOutput(parseEnum(ClockOutput.class, event.getOldValue(), ClockOutput.REAL),
-				parseEnum(ClockOutput.class, event.getNewValue(), ClockOutput.REAL));
-		}
-
-		if (event.getKey().startsWith("virtual"))
-		{
-			virtualClockWindow.apply();
+			syncOutput();
+			awtrixClient.probeClock();
 		}
 
 		if ("clockVolume".equals(event.getKey()))
@@ -623,6 +654,7 @@ public class UlanziOsrsPlugin extends Plugin
 		}
 
 		previewUntilMs = System.currentTimeMillis() + PREVIEW_MS;
+		updateWindow();
 		clientThread.invokeLater(() ->
 		{
 			awtrixClient.clearCache();
@@ -736,6 +768,7 @@ public class UlanziOsrsPlugin extends Plugin
 	{
 		previewUntilMs = 0L;
 		previewEnd = null;
+		updateWindow();
 		awtrixClient.dismissAfk();
 		awtrixClient.dismissLowAlerts();
 		awtrixClient.clearStats();
@@ -788,21 +821,70 @@ public class UlanziOsrsPlugin extends Plugin
 
 	/**
 	 * Pages stop going to a clock that has been switched off, so it is cleared on the way out
-	 * rather than left showing the last page sent to it. A virtual clock switched on starts
-	 * empty, and the next refresh fills it.
+	 * rather than left showing the last page sent to it. A virtual clock switched on or off
+	 * starts empty, and the next refresh fills whichever is now in use.
 	 */
-	private void switchOutput(ClockOutput before, ClockOutput after)
+	private void syncOutput()
 	{
-		if (before.toReal() && !after.toReal())
+		ClockOutput before = appliedOutput;
+		ClockOutput after = awtrixClient.output();
+		appliedOutput = after;
+		if (before != null && before.toReal() && !after.toReal())
 		{
 			awtrixClient.clearRealClock();
 		}
-		if (!before.toVirtual() && after.toVirtual())
+		if (before == null || before.toVirtual() != after.toVirtual())
 		{
 			virtualClock.reset();
 		}
 		postStatus(connectionStatus(config.host()));
-		virtualClockWindow.apply();
+		updateWindow();
+	}
+
+	/** A real clock answered: remember it, which on Automatic moves the pages over to it. */
+	private void clockFound(String address)
+	{
+		if (address.equals(config.confirmedClock()))
+		{
+			return;
+		}
+		configManager.setConfiguration(UlanziConfig.GROUP, "confirmedClock", address);
+		if (config.clockOutput() == ClockOutput.AUTO)
+		{
+			postChat("Clock connected, so the virtual clock is hidden. Set Show pages on to Both to keep it too.");
+		}
+	}
+
+	private void clockMissing()
+	{
+		postStatus(connectionStatus(config.host()));
+		updateWindow();
+	}
+
+	private void closeVirtualClock()
+	{
+		configManager.setConfiguration(UlanziConfig.GROUP, "clockOutput", ClockOutput.REAL);
+		postChat("Virtual clock closed. Set Show pages on to Automatic to bring it back.");
+	}
+
+	private static boolean isInGame(GameState state)
+	{
+		return state == GameState.LOGGED_IN || state == GameState.LOADING
+			|| state == GameState.HOPPING || state == GameState.CONNECTION_LOST;
+	}
+
+	/**
+	 * The window is up when pages go to it, unless it is waiting to hear from a clock or you
+	 * are logged out with that hidden. A preview always shows, and so does a first run, so
+	 * turning the plugin on at the login screen visibly does something.
+	 */
+	private void updateWindow()
+	{
+		boolean firstRun = !config.virtualIntroduced();
+		boolean previewing = previewUntilMs > System.currentTimeMillis();
+		boolean visibleNow = inGame || !config.virtualHideLoggedOut() || firstRun || previewing;
+		virtualClock.setWelcome(firstRun && !inGame);
+		virtualClockWindow.setAllowed(awtrixClient.output().toVirtual() && !awtrixClient.isLookingForClock() && visibleNow);
 	}
 
 	@Subscribe
@@ -825,6 +907,17 @@ public class UlanziOsrsPlugin extends Plugin
 	public void onGameStateChanged(GameStateChanged event)
 	{
 		GameState state = event.getGameState();
+		boolean nowInGame = isInGame(state);
+		if (nowInGame != inGame)
+		{
+			inGame = nowInGame;
+			updateWindow();
+		}
+		if (state == GameState.LOGGED_IN && !config.virtualIntroduced())
+		{
+			configManager.setConfiguration(UlanziConfig.GROUP, "virtualIntroduced", true);
+			postChat("No hardware needed: the virtual clock shows your stats and AFK status. Right-click it to connect a real clock.");
+		}
 		if (state == GameState.LOGIN_SCREEN
 			|| state == GameState.LOGIN_SCREEN_AUTHENTICATOR)
 		{

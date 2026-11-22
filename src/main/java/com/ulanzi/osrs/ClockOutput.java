@@ -3,13 +3,17 @@ package com.ulanzi.osrs;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
-/** Where the pages go: the clock on the network, the virtual one on screen, or both. */
+/**
+ * Where the pages go. Automatic is the default: the virtual clock, until a real clock has
+ * answered at the saved address, and from then on the real one alone.
+ */
 @Getter
 @AllArgsConstructor
 public enum ClockOutput
 {
-	REAL("Real clock"),
+	AUTO("Automatic"),
 	VIRTUAL("Virtual clock"),
+	REAL("Real clock"),
 	BOTH("Both");
 
 	private final String name;
@@ -18,6 +22,16 @@ public enum ClockOutput
 	public String toString()
 	{
 		return name;
+	}
+
+	/** What this setting means right now. Only Automatic depends on the clock. */
+	ClockOutput resolve(boolean hasAddress, boolean connected)
+	{
+		if (this != AUTO)
+		{
+			return this;
+		}
+		return hasAddress && connected ? REAL : VIRTUAL;
 	}
 
 	boolean toReal()

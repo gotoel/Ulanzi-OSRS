@@ -10,7 +10,8 @@ import java.util.Map;
  *
  * The small font is five rows tall and sits on rows 1 to 5, like the clock's. The large one
  * is seven rows tall on rows 0 to 6, drawn here by stretching the small glyphs, which keeps
- * the two looking like one family. Lowercase is drawn as capitals.
+ * the two looking like one family. Lowercase is drawn as capitals, apart from the k and m
+ * that shorten large numbers.
  */
 final class PixelFont
 {
@@ -64,6 +65,8 @@ final class PixelFont
 		glyph('X', "#.#", "#.#", ".#.", "#.#", "#.#");
 		glyph('Y', "#.#", "#.#", ".#.", ".#.", ".#.");
 		glyph('Z', "###", "..#", ".#.", "#..", "###");
+		glyph('k', "#..", "#.#", "##.", "##.", "#.#");
+		glyph('m', "...", "###", "###", "#.#", "#.#");
 		glyph(' ', "", "", "", "", "");
 		glyph('+', "...", ".#.", "###", ".#.", "...");
 		glyph('-', "...", "...", "###", "...", "...");
@@ -137,7 +140,11 @@ final class PixelFont
 
 	private static String[] rows(char c)
 	{
-		String[] rows = GLYPHS.get(Character.toUpperCase(c));
+		String[] rows = GLYPHS.get(c);
+		if (rows == null)
+		{
+			rows = GLYPHS.get(Character.toUpperCase(c));
+		}
 		return rows == null ? UNKNOWN : rows;
 	}
 

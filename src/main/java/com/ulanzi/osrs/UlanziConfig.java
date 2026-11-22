@@ -191,21 +191,33 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "clockOutput",
 		name = "Show pages on",
-		description = "Real clock sends pages to the clock at the address above. Virtual clock shows them in a "
-			+ "window on your desktop, with nothing sent over the network. Both does the two at once.",
+		description = "Automatic uses the virtual clock until a real clock answers at the address above, then "
+			+ "switches to the real one. Virtual clock and Real clock stay on that one. Both shows the two at once.",
 		position = 0,
 		section = virtualSection
 	)
 	default ClockOutput clockOutput()
 	{
-		return ClockOutput.REAL;
+		return ClockOutput.AUTO;
+	}
+
+	@ConfigItem(
+		keyName = "virtualHideLoggedOut",
+		name = "Hide when logged out",
+		description = "Keep the virtual clock off your screen unless you are logged in.",
+		position = 1,
+		section = virtualSection
+	)
+	default boolean virtualHideLoggedOut()
+	{
+		return true;
 	}
 
 	@ConfigItem(
 		keyName = "virtualAlwaysOnTop",
 		name = "Always on top",
 		description = "Keep the virtual clock above every other window, the game included.",
-		position = 1,
+		position = 3,
 		section = virtualSection
 	)
 	default boolean virtualAlwaysOnTop()
@@ -229,21 +241,21 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "virtualStyle",
 		name = "LED style",
-		description = "Round looks like the clock's LEDs, Square is crisp flat pixels, and Glow adds a soft halo "
-			+ "around every lit LED.",
-		position = 3,
+		description = "Clock matches the real panel: square pixels on black. Round uses dots, Square shows the "
+			+ "unlit pixels too, and Glow adds a soft halo.",
+		position = 4,
 		section = virtualSection
 	)
 	default LedStyle virtualStyle()
 	{
-		return LedStyle.ROUND;
+		return LedStyle.CLOCK;
 	}
 
 	@ConfigItem(
 		keyName = "virtualSize",
 		name = "LED size",
-		description = "Pixels per LED. Dragging the window's bottom-right corner sets this too.",
-		position = 4,
+		description = "Pixels per LED. Dragging any edge of the window sets this too.",
+		position = 5,
 		section = virtualSection
 	)
 	@Range(min = VirtualClockWindow.MIN_PITCH, max = VirtualClockWindow.MAX_PITCH)
@@ -256,8 +268,8 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "virtualOpacity",
 		name = "Opacity",
-		description = "How see-through the window is, from 20% to fully solid.",
-		position = 5,
+		description = "How see-through the window is, from 20% to fully solid. Scrolling over the window sets this too.",
+		position = 6,
 		section = virtualSection
 	)
 	@Range(min = 20, max = 100)
@@ -271,12 +283,58 @@ public interface UlanziConfig extends Config
 		keyName = "virtualLocked",
 		name = "Lock position",
 		description = "Stop the window being moved or resized by accident.",
-		position = 6,
+		position = 7,
 		section = virtualSection
 	)
 	default boolean virtualLocked()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+		keyName = "virtualIdle",
+		name = "When idle, show",
+		description = "What the virtual clock shows when no page is up, such as with stats switched off.",
+		position = 8,
+		section = virtualSection
+	)
+	default IdleDisplay virtualIdle()
+	{
+		return IdleDisplay.QUIET;
+	}
+
+	@ConfigItem(
+		keyName = "virtualTimeFormat",
+		name = "Time format",
+		description = "How the time reads when When idle, show is Time. System follows your computer's region.",
+		position = 9,
+		section = virtualSection
+	)
+	default TimeFormat virtualTimeFormat()
+	{
+		return TimeFormat.SYSTEM;
+	}
+
+	@ConfigItem(
+		keyName = "virtualIntroduced",
+		name = "",
+		description = "",
+		hidden = true
+	)
+	default boolean virtualIntroduced()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "confirmedClock",
+		name = "",
+		description = "",
+		hidden = true
+	)
+	default String confirmedClock()
+	{
+		return "";
 	}
 
 	@ConfigItem(

@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import java.time.LocalTime;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -36,6 +37,10 @@ class VirtualClock
 	private static final String PUSHED = "/api/v1/apps/pushed/";
 	private static final String APPS = "/api/v1/apps";
 	private static final int IDLE_COLOR = 0x8C8C8C;
+	private static final int QUIET_COLOR = 0x3CB43C;
+	private static final int WELCOME_COLOR = 0xC8C8C8;
+	private static final long ICON_MS = 4_000L;
+	private static final double QUIET_CYCLE_MS = 3_600.0;
 
 	/** What the virtual clock answers, in the shape of an HTTP reply. */
 	static final class Reply
@@ -100,6 +105,7 @@ class VirtualClock
 	private boolean autoBrightness = true;
 	private int alertVolume = AwtrixClient.DEFAULT_ALERT_VOLUME;
 	private List<String> order = new ArrayList<>();
+	private boolean welcome;
 
 	@Inject
 	VirtualClock(ChipPlayer chipPlayer, UlanziConfig config)
@@ -122,6 +128,12 @@ class VirtualClock
 		queue.clear();
 		activeApp = null;
 		order = new ArrayList<>();
+	}
+
+	/** Until the first login the idle page says what to do next. */
+	synchronized void setWelcome(boolean welcome)
+	{
+		this.welcome = welcome;
 	}
 
 	/** Handles one request the plugin would have sent to the clock. */
@@ -235,7 +247,7 @@ class VirtualClock
 			PageRenderer.render(apps.get(app), now - appStartedMs.getOrDefault(app, now), now, frame);
 			return;
 		}
-		idle(frame);
+		idle(frame, now);
 	}
 
 	/** How bright the panel is running, 0 to 1, for the window to light its LEDs by. */
@@ -387,14 +399,70 @@ class VirtualClock
 		return apps.isEmpty() ? null : apps.keySet().iterator().next();
 	}
 
-	/** With nothing pushed the clock shows the time, so the window is never just dark. */
-	private static void idle(int[] frame)
+	/** What is up with no page to show, chosen in the settings. */
+	private void idle(int[] frame, long now)
 	{
 		Frame.fill(frame, 0);
-		LocalTime time = LocalTime.now();
-		String text = String.format("%02d:%02d", time.getHour(), time.getMinute());
+		if (welcome)
+		{
+			centered(frame, "LOG IN", WELCOME_COLOR);
+			return;
+		}
+		IdleDisplay display = config.virtualIdle();
+		if (display == IdleDisplay.NOTHING)
+		{
+			return;
+		}
+		if (display == IdleDisplay.TIME)
+		{
+			centered(frame, formatTime(LocalTime.now(), config.virtualTimeFormat(), Locale.getDefault()), IDLE_COLOR);
+			return;
+		}
+		if (display == IdleDisplay.ICONS)
+		{
+			SkillActivity[] activities = SkillActivity.values();
+			SkillActivity activity = activities[(int) Math.floorMod(now / ICON_MS, (long) activities.length)];
+			GifIcon icon = GifIcon.of(activity.iconData());
+			if (icon != null)
+			{
+				icon.draw(frame, (Frame.WIDTH - icon.width) / 2, 0, now);
+			}
+			return;
+		}
+		quiet(frame, now);
+	}
+
+	/** Three dots breathing in turn: alive, and easy to ignore. */
+	private static void quiet(int[] frame, long now)
+	{
+		for (int dot = 0; dot < 3; dot++)
+		{
+			double phase = now / QUIET_CYCLE_MS * 2 * Math.PI - dot * 0.9;
+			int color = Frame.scale(QUIET_COLOR, 0.42 + 0.33 * Math.sin(phase));
+			int x = 12 + dot * 3;
+			for (int row = 3; row <= 4; row++)
+			{
+				Frame.set(frame, x, row, color);
+				Frame.set(frame, x + 1, row, color);
+			}
+		}
+	}
+
+	private static void centered(int[] frame, String text, int color)
+	{
 		int x = (Frame.WIDTH - PixelFont.width(text)) / 2;
-		PixelFont.draw(frame, text, x, PixelFont.SMALL_TOP, false, (px, i) -> IDLE_COLOR, 0, Frame.WIDTH);
+		PixelFont.draw(frame, text, x, PixelFont.SMALL_TOP, false, (px, i) -> color, 0, Frame.WIDTH);
+	}
+
+	/** "2:05PM" on a 12-hour clock, "14:05" on a 24-hour one. */
+	static String formatTime(LocalTime time, TimeFormat format, Locale locale)
+	{
+		if (!(format == null ? TimeFormat.SYSTEM : format).is24Hour(locale))
+		{
+			int hour = time.getHour() % 12 == 0 ? 12 : time.getHour() % 12;
+			return String.format(Locale.ROOT, "%d:%02d%s", hour, time.getMinute(), time.getHour() < 12 ? "AM" : "PM");
+		}
+		return String.format(Locale.ROOT, "%02d:%02d", time.getHour(), time.getMinute());
 	}
 
 	private JsonArray appList()
