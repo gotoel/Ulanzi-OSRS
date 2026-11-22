@@ -296,6 +296,16 @@ public class VirtualClockTest
 	}
 
 	@Test
+	public void theOpacitySliderRunsFromTheMinimumToSolid()
+	{
+		Assert.assertEquals(20, VirtualClockWindow.opacityAt(100, 100, 80));
+		Assert.assertEquals(60, VirtualClockWindow.opacityAt(140, 100, 80));
+		Assert.assertEquals(100, VirtualClockWindow.opacityAt(180, 100, 80));
+		Assert.assertEquals("past the ends", 20, VirtualClockWindow.opacityAt(-50, 100, 80));
+		Assert.assertEquals("past the ends", 100, VirtualClockWindow.opacityAt(900, 100, 80));
+	}
+
+	@Test
 	public void lowercaseKeepsItsNumberSuffixes()
 	{
 		Assert.assertTrue(PixelFont.known('k'));

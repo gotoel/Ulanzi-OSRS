@@ -19,7 +19,7 @@ A skill page can take over with your level and XP per hour. Low hitpoints flashe
 It is on by default and only appears while you are logged in.
 
 - Drag it anywhere, and drag any edge to resize it.
-- Hover over it for **always on top**, **opacity**, **more options**, and **close**. Scrolling over it changes the opacity too.
+- Hover over it for **always on top**, an **opacity** slider, **more options**, and **close**. Scrolling over it changes the opacity too.
 - **Only when tabbed out** hides it while you are playing and shows it when you switch to another window.
 - When no page is up it can show quiet dots, skill icons, the time in 12 or 24 hours, or nothing.
 - Nothing is sent over the network, and tones play through your speakers.

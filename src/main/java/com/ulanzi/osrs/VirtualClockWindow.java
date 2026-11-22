@@ -16,6 +16,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.util.Arrays;
+import java.util.function.BiConsumer;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import javax.swing.ButtonGroup;
@@ -57,7 +58,6 @@ class VirtualClockWindow
 	private static final int SCREEN_MARGIN = 24;
 	private static final int OPACITY_WHEEL_STEP = 5;
 	private static final int MIN_OPACITY = 20;
-	private static final int[] OPACITY_STEPS = {100, 75, 50, 30};
 	private static final Color BEZEL = new Color(0x05, 0x05, 0x05);
 	private static final Color UNLIT = new Color(0x1E, 0x1E, 0x1E);
 	private static final int[] SIZE_PRESETS = {6, 10, 16, 24};
@@ -66,7 +66,7 @@ class VirtualClockWindow
 	enum Control
 	{
 		PIN("Always on top"),
-		OPACITY("Opacity: click to step, or scroll over the clock"),
+		OPACITY("Opacity"),
 		MENU("More options"),
 		CLOSE("Close the virtual clock");
 
@@ -80,7 +80,7 @@ class VirtualClockWindow
 
 	private final VirtualClock clock;
 	private final UlanziConfig config;
-	private final ConfigManager configManager;
+	private final BiConsumer<String, Object> settings;
 
 	private JFrame frame;
 	private LedPanel panel;
@@ -88,13 +88,20 @@ class VirtualClockWindow
 	private boolean clientFocused = true;
 	private boolean allowed;
 	private Runnable closeHandler;
+	/** Held while the slider is dragged, so a config change cannot snap the window back mid-drag. */
+	private boolean draggingOpacity;
 
 	@Inject
 	VirtualClockWindow(VirtualClock clock, UlanziConfig config, ConfigManager configManager)
 	{
+		this(clock, config, (key, value) -> configManager.setConfiguration(UlanziConfig.GROUP, key, value));
+	}
+
+	VirtualClockWindow(VirtualClock clock, UlanziConfig config, BiConsumer<String, Object> settings)
+	{
 		this.clock = clock;
 		this.config = config;
-		this.configManager = configManager;
+		this.settings = settings;
 	}
 
 	/** Whether the plugin wants the window up at all right now, then matches the config. */
@@ -150,7 +157,12 @@ class VirtualClockWindow
 			frame.setSize(size);
 		}
 		frame.setAlwaysOnTop(config.virtualAlwaysOnTop());
-		applyOpacity();
+		if (!draggingOpacity)
+		{
+			int opacity = Math.max(MIN_OPACITY, Math.min(100, config.virtualOpacity()));
+			applyOpacity(opacity);
+			panel.setSliderValue(opacity);
+		}
 		panel.setLocked(config.virtualLocked());
 		panel.setPinned(config.virtualAlwaysOnTop());
 
@@ -214,9 +226,9 @@ class VirtualClockWindow
 		return Math.max(MIN_PITCH, Math.min(MAX_PITCH, config.virtualSize()));
 	}
 
-	private void applyOpacity()
+	private void applyOpacity(int percent)
 	{
-		float opacity = Math.max(MIN_OPACITY, Math.min(100, config.virtualOpacity())) / 100f;
+		float opacity = percent / 100f;
 		try
 		{
 			GraphicsDevice device = frame.getGraphicsConfiguration().getDevice();
@@ -349,7 +361,7 @@ class VirtualClockWindow
 
 	private void set(String key, Object value)
 	{
-		configManager.setConfiguration(UlanziConfig.GROUP, key, value);
+		settings.accept(key, value);
 	}
 
 	private void press(Control control, MouseEvent e)
@@ -360,7 +372,7 @@ class VirtualClockWindow
 				set("virtualAlwaysOnTop", !config.virtualAlwaysOnTop());
 				break;
 			case OPACITY:
-				set("virtualOpacity", nextOpacity(config.virtualOpacity()));
+				panel.setSliderOpen(!panel.sliderOpen);
 				break;
 			case MENU:
 				menu().show(panel, e.getX(), e.getY());
@@ -376,17 +388,23 @@ class VirtualClockWindow
 		}
 	}
 
-	/** The next step down, and back to solid from the bottom. */
-	static int nextOpacity(int current)
+	/** The opacity a point on the slider's track stands for, from the minimum to fully solid. */
+	static int opacityAt(int x, int trackLeft, int trackWidth)
 	{
-		for (int step : OPACITY_STEPS)
+		if (trackWidth <= 0)
 		{
-			if (step < current)
-			{
-				return step;
-			}
+			return 100;
 		}
-		return OPACITY_STEPS[0];
+		double along = Math.max(0, Math.min(1, (x - trackLeft) / (double) trackWidth));
+		return (int) Math.round(MIN_OPACITY + along * (100 - MIN_OPACITY));
+	}
+
+	/** Follows the slider live, and leaves saving it until the drag is over. */
+	private void dragOpacity(int x)
+	{
+		int opacity = opacityAt(x, panel.trackLeft(), panel.trackWidth());
+		panel.setSliderValue(opacity);
+		applyOpacity(opacity);
 	}
 
 	private void askForClockAddress()
@@ -489,8 +507,9 @@ class VirtualClockWindow
 		@Override
 		public void mouseExited(MouseEvent e)
 		{
-			if (pressedOnScreen == null)
+			if (pressedOnScreen == null && !draggingOpacity)
 			{
+				panel.setSliderOpen(false);
 				panel.setHover(false, null);
 			}
 		}
@@ -505,6 +524,12 @@ class VirtualClockWindow
 			}
 			if (!SwingUtilities.isLeftMouseButton(e))
 			{
+				return;
+			}
+			if (panel.inSlider(e.getPoint()))
+			{
+				draggingOpacity = true;
+				dragOpacity(e.getX());
 				return;
 			}
 			Control control = panel.controlAt(e.getPoint());
@@ -527,6 +552,11 @@ class VirtualClockWindow
 		@Override
 		public void mouseDragged(MouseEvent e)
 		{
+			if (draggingOpacity)
+			{
+				dragOpacity(e.getX());
+				return;
+			}
 			if (pressedOnScreen == null)
 			{
 				return;
@@ -577,6 +607,17 @@ class VirtualClockWindow
 				menu().show(panel, e.getX(), e.getY());
 				return;
 			}
+			if (draggingOpacity)
+			{
+				draggingOpacity = false;
+				set("virtualOpacity", panel.sliderValue);
+				if (!panel.contains(e.getPoint()))
+				{
+					panel.setSliderOpen(false);
+					panel.setHover(false, null);
+				}
+				return;
+			}
 			if (pressedOnScreen == null)
 			{
 				return;
@@ -599,7 +640,7 @@ class VirtualClockWindow
 		{
 			panel.setHover(true, e.getPoint());
 			Control control = panel.controlAt(e.getPoint());
-			if (control != null)
+			if (control != null || panel.inSlider(e.getPoint()))
 			{
 				panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 			}
@@ -636,6 +677,9 @@ class VirtualClockWindow
 		private static final Color ICON = new Color(0xB8, 0xB8, 0xB8);
 		private static final Color ICON_ON = new Color(0x4F, 0xE0, 0x8A);
 		private static final Color CLOSE_HOVER = new Color(0xC8, 0x3C, 0x32);
+		private static final Color TRACK = new Color(0x58, 0x58, 0x58);
+		private static final int SLIDER_PAD = 8;
+		private static final int SLIDER_LABEL = 28;
 
 		private final int[] frame = Frame.blank();
 		private final int[] shown = Frame.blank();
@@ -646,6 +690,8 @@ class VirtualClockWindow
 		private boolean pinned;
 		private boolean hover;
 		private Control hovered;
+		private boolean sliderOpen;
+		private int sliderValue = 100;
 		private VirtualClock clock;
 
 		LedPanel()
@@ -712,6 +758,47 @@ class VirtualClockWindow
 				hovered = over;
 				repaint();
 			}
+		}
+
+		void setSliderOpen(boolean open)
+		{
+			if (sliderOpen != open)
+			{
+				sliderOpen = open;
+				repaint();
+			}
+		}
+
+		void setSliderValue(int value)
+		{
+			if (sliderValue != value)
+			{
+				sliderValue = value;
+				repaint();
+			}
+		}
+
+		/** Sits just left of the buttons, and narrows to fit a small clock. */
+		private Rectangle sliderBounds()
+		{
+			Rectangle first = buttonBounds(Control.PIN);
+			int width = Math.max(48, Math.min(buttonSize() * 6, first.x - EDGE - 3));
+			return new Rectangle(first.x - width - 2, first.y, width, first.height);
+		}
+
+		int trackLeft()
+		{
+			return sliderBounds().x + SLIDER_PAD;
+		}
+
+		int trackWidth()
+		{
+			return Math.max(1, sliderBounds().width - 2 * SLIDER_PAD - SLIDER_LABEL);
+		}
+
+		boolean inSlider(Point point)
+		{
+			return hover && sliderOpen && sliderBounds().contains(point);
 		}
 
 		private int buttonSize()
@@ -877,6 +964,37 @@ class VirtualClockWindow
 				}
 				paintIcon(g, control, b);
 			}
+			if (sliderOpen)
+			{
+				paintSlider(g);
+			}
+		}
+
+		private void paintSlider(Graphics2D g)
+		{
+			Rectangle b = sliderBounds();
+			g.setColor(PILL);
+			g.fillRoundRect(b.x, b.y, b.width, b.height, 6, 6);
+
+			int left = trackLeft();
+			int width = trackWidth();
+			int cy = b.y + b.height / 2;
+			int thumb = left + (int) Math.round((sliderValue - MIN_OPACITY) / (double) (100 - MIN_OPACITY) * width);
+			g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+			g.setColor(TRACK);
+			g.drawLine(left, cy, left + width, cy);
+			g.setColor(ICON_ON);
+			g.drawLine(left, cy, thumb, cy);
+			g.setColor(Color.WHITE);
+			int radius = Math.max(4, b.height / 4);
+			g.fillOval(thumb - radius, cy - radius, 2 * radius, 2 * radius);
+
+			g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+			g.setFont(g.getFont().deriveFont(java.awt.Font.PLAIN, 10f));
+			g.setColor(ICON);
+			String label = sliderValue + "%";
+			java.awt.FontMetrics metrics = g.getFontMetrics();
+			g.drawString(label, b.x + b.width - 4 - metrics.stringWidth(label), cy + metrics.getAscent() / 2 - 1);
 		}
 
 		private void paintIcon(Graphics2D g, Control control, Rectangle b)
