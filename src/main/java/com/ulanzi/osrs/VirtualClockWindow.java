@@ -685,7 +685,7 @@ class VirtualClockWindow
 		private final int[] shown = Frame.blank();
 		private double brightness = 1.0;
 		private int pitch = 10;
-		private LedStyle style = LedStyle.CLOCK;
+		private LedStyle style = LedStyle.SQUARE;
 		private boolean locked;
 		private boolean pinned;
 		private boolean hover;
@@ -874,10 +874,6 @@ class VirtualClockWindow
 				g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 				g.setColor(BEZEL);
 				g.fillRect(0, 0, getWidth(), getHeight());
-				if (style == LedStyle.GLOW)
-				{
-					paintHalos(g);
-				}
 				paintLeds(g);
 				if (hover)
 				{
@@ -890,32 +886,10 @@ class VirtualClockWindow
 			}
 		}
 
-		private void paintHalos(Graphics2D g)
-		{
-			int bezel = bezel(pitch);
-			int halo = Math.round(pitch * 1.7f);
-			for (int y = 0; y < Frame.HEIGHT; y++)
-			{
-				for (int x = 0; x < Frame.WIDTH; x++)
-				{
-					int rgb = Frame.get(shown, x, y);
-					if (rgb == 0)
-					{
-						continue;
-					}
-					Color c = lit(rgb);
-					g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), 60));
-					int cx = bezel + x * pitch + pitch / 2;
-					int cy = bezel + y * pitch + pitch / 2;
-					g.fillOval(cx - halo / 2, cy - halo / 2, halo, halo);
-				}
-			}
-		}
-
 		private void paintLeds(Graphics2D g)
 		{
 			int bezel = bezel(pitch);
-			boolean squared = style == LedStyle.CLOCK || style == LedStyle.SQUARE;
+			boolean squared = style == LedStyle.SQUARE;
 			int inset = squared ? (pitch >= 6 ? Math.max(1, pitch / 10) : 0) : Math.max(1, Math.round(pitch * 0.12f));
 			int dot = Math.max(1, pitch - 2 * inset);
 			if (squared)
@@ -928,7 +902,7 @@ class VirtualClockWindow
 				{
 					int rgb = Frame.get(shown, x, y);
 					// The real panel's dark pixels vanish into its black diffuser.
-					if (rgb == 0 && style == LedStyle.CLOCK)
+					if (rgb == 0 && squared)
 					{
 						continue;
 					}

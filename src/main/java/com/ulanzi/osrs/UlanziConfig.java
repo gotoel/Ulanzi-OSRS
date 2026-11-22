@@ -241,14 +241,13 @@ public interface UlanziConfig extends Config
 	@ConfigItem(
 		keyName = "virtualStyle",
 		name = "LED style",
-		description = "Clock matches the real panel: square pixels on black. Round uses dots, Square shows the "
-			+ "unlit pixels too, and Glow adds a soft halo.",
+		description = "Square matches the real clock's panel. Round draws dots, with the unlit ones faintly showing.",
 		position = 4,
 		section = virtualSection
 	)
 	default LedStyle virtualStyle()
 	{
-		return LedStyle.CLOCK;
+		return LedStyle.SQUARE;
 	}
 
 	@ConfigItem(

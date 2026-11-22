@@ -7,10 +7,8 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum LedStyle
 {
-	CLOCK("Clock"),
-	ROUND("Round"),
 	SQUARE("Square"),
-	GLOW("Glow");
+	ROUND("Round");
 
 	private final String name;
 
