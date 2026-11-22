@@ -1,24 +1,25 @@
 package com.ulanzi.osrs;
 
+import java.io.ByteArrayInputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.LineUnavailableException;
-import javax.sound.sampled.SourceDataLine;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.audio.AudioPlayer;
 
 /**
  * Plays the clock's tunes through the computer's speakers.
  *
  * The voice is deliberately nothing like a piezo: a sine with a touch of its octave for
  * warmth, eased in and out so no note starts or ends with a click. The audio is built in
- * memory and written to the sound card from one background thread, so a tune never holds
- * up the game, and a new tune cuts off the one still playing rather than queueing behind it.
+ * memory as a WAV and handed to RuneLite's audio player from one background thread, so a
+ * tune never holds up the game.
  */
 @Slf4j
 @Singleton
@@ -32,16 +33,18 @@ class ChipPlayer
 	/** Full volume stays well short of clipping, and leaves room for the octave above. */
 	private static final double PEAK = 0.45;
 	private static final double OCTAVE_SHARE = 0.15;
-	private static final int CHUNK_BYTES = 2_048;
+	private static final int WAV_HEADER_BYTES = 44;
 
 	private final UlanziConfig config;
+	private final AudioPlayer audioPlayer;
 	private final AtomicInteger generation = new AtomicInteger();
 	private ExecutorService executor;
 
 	@Inject
-	ChipPlayer(UlanziConfig config)
+	ChipPlayer(UlanziConfig config, AudioPlayer audioPlayer)
 	{
 		this.config = config;
+		this.audioPlayer = audioPlayer;
 	}
 
 	void play(String rtttl)
@@ -56,12 +59,12 @@ class ChipPlayer
 		{
 			return;
 		}
-		byte[] pcm = render(notes, volume);
+		byte[] wav = wav(render(notes, volume));
 		int mine = generation.incrementAndGet();
-		executor().execute(() -> write(pcm, mine));
+		executor().execute(() -> playNow(wav, mine));
 	}
 
-	/** Cuts off whatever is playing and lets the sound thread go. */
+	/** Drops any tune that has not started yet and lets the sound thread go. */
 	synchronized void stop()
 	{
 		generation.incrementAndGet();
@@ -86,44 +89,41 @@ class ChipPlayer
 		return executor;
 	}
 
-	private void write(byte[] pcm, int mine)
+	private void playNow(byte[] wav, int mine)
 	{
 		if (generation.get() != mine)
 		{
 			return;
 		}
-		AudioFormat format = new AudioFormat(SAMPLE_RATE, 16, 1, true, false);
-		SourceDataLine line;
 		try
 		{
-			line = AudioSystem.getSourceDataLine(format);
-			line.open(format);
+			// The volume is already in the samples, so the player adds no gain of its own.
+			audioPlayer.play(new ByteArrayInputStream(wav), 0f);
 		}
-		catch (LineUnavailableException | IllegalArgumentException | SecurityException ex)
+		catch (Exception ex)
 		{
 			log.debug("No sound output for the computer", ex);
-			return;
 		}
+	}
 
-		try
-		{
-			line.start();
-			for (int offset = 0; offset < pcm.length; offset += CHUNK_BYTES)
-			{
-				if (generation.get() != mine)
-				{
-					line.flush();
-					return;
-				}
-				line.write(pcm, offset, Math.min(CHUNK_BYTES, pcm.length - offset));
-			}
-			line.drain();
-		}
-		finally
-		{
-			line.stop();
-			line.close();
-		}
+	/** Wraps 16-bit mono samples in the WAV header the audio player needs to read them. */
+	static byte[] wav(byte[] pcm)
+	{
+		ByteBuffer out = ByteBuffer.allocate(WAV_HEADER_BYTES + pcm.length).order(ByteOrder.LITTLE_ENDIAN);
+		out.put("RIFF".getBytes(StandardCharsets.US_ASCII));
+		out.putInt(WAV_HEADER_BYTES - 8 + pcm.length);
+		out.put("WAVEfmt ".getBytes(StandardCharsets.US_ASCII));
+		out.putInt(16);
+		out.putShort((short) 1);
+		out.putShort((short) 1);
+		out.putInt(SAMPLE_RATE);
+		out.putInt(SAMPLE_RATE * 2);
+		out.putShort((short) 2);
+		out.putShort((short) 16);
+		out.put("data".getBytes(StandardCharsets.US_ASCII));
+		out.putInt(pcm.length);
+		out.put(pcm);
+		return out.array();
 	}
 
 	/**

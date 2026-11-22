@@ -1,10 +1,13 @@
 package com.ulanzi.osrs;
 
 import com.google.gson.JsonObject;
+import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -115,6 +118,19 @@ public class SoundTest
 			}
 		}
 		Assert.assertEquals(0, peakOf(ChipPlayer.render(Rtttl.parse(Tune.AFK.rtttl(SoundStyle.SOFT)), 0)));
+	}
+
+	@Test
+	public void tunesAreWrappedInAWavTheAudioPlayerCanRead() throws Exception
+	{
+		byte[] pcm = ChipPlayer.render(Rtttl.parse(Tune.LEVEL_UP.rtttl(SoundStyle.SOFT)), 40);
+		try (AudioInputStream wav = AudioSystem.getAudioInputStream(new ByteArrayInputStream(ChipPlayer.wav(pcm))))
+		{
+			Assert.assertEquals(ChipPlayer.SAMPLE_RATE, wav.getFormat().getSampleRate(), 0f);
+			Assert.assertEquals(16, wav.getFormat().getSampleSizeInBits());
+			Assert.assertEquals(1, wav.getFormat().getChannels());
+			Assert.assertEquals(pcm.length / 2, wav.getFrameLength());
+		}
 	}
 
 	private static int peakOf(byte[] pcm)

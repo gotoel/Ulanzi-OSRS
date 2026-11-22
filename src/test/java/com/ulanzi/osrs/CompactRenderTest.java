@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
+import net.runelite.client.audio.AudioPlayer;
 import okhttp3.OkHttpClient;
 import org.junit.Assert;
 import org.junit.Test;
@@ -245,7 +246,7 @@ public class CompactRenderTest
 		UlanziConfig config = new UlanziConfig()
 		{
 		};
-		ChipPlayer player = new ChipPlayer(config);
+		ChipPlayer player = new ChipPlayer(config, new AudioPlayer());
 		AwtrixClient client = new AwtrixClient(new OkHttpClient(), config, new Gson(), player,
 			new VirtualClock(player, config));
 		return client.compactDraw(cells);

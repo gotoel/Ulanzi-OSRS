@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.util.concurrent.atomic.AtomicLong;
+import net.runelite.client.audio.AudioPlayer;
 import okhttp3.OkHttpClient;
 import org.junit.Assert;
 import org.junit.Test;
@@ -33,7 +34,7 @@ public class VirtualClockTest
 			return IdleDisplay.TIME;
 		}
 	};
-	private final ChipPlayer player = new ChipPlayer(config);
+	private final ChipPlayer player = new ChipPlayer(config, new AudioPlayer());
 	private final VirtualClock clock = new VirtualClock(player, config, now::get);
 
 	@Test
