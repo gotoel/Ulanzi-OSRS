@@ -2,6 +2,10 @@
 
 **No hardware needed.** Turn the plugin on and a small LED overlay appears on your desktop with your hitpoints, prayer, run energy, special attack, and AFK status. Own an [Ulanzi TC001](https://github.com/rroels/ulanzi_tc001_hardware) pixel clock running [AWTRIX NG](https://blueforcer.github.io/awtrix-ng/)? The plugin can drive that instead, with the same pages.
 
+<img width="644" alt="" src="docs/gallery/divider.png">
+
+## Gallery
+
 Click a picture marked ▶ to watch it move.
 
 ### Real clock (Ulanzi TC001)
@@ -13,6 +17,8 @@ Click a picture marked ▶ to watch it move.
 <td><a href="docs/gallery/skill-bar.gif"><img width="320" alt="Bar toward the next level on a real clock" src="docs/gallery/skill-bar-still.png"></a><br><sub>▶ Bar toward the next level</sub></td>
 </tr>
 </table>
+
+<br>
 
 ### Virtual overlay
 
