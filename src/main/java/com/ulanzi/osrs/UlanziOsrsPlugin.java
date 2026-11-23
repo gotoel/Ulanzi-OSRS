@@ -55,7 +55,7 @@ import net.runelite.client.plugins.xptracker.XpTrackerService;
 @Slf4j
 @PluginDescriptor(
 	name = "Ulanzi OSRS Clock",
-	description = "A small LED overlay on your desktop for stats, alerts, and AFK. No hardware needed, and it can drive an Ulanzi TC001 too",
+	description = "A small LED overlay on your desktop for stats, alerts, and AFK. No hardware needed, and it can drive an Ulanzi TC001 pixel clock too",
 	tags = {"afk", "idle", "indicator", "hitpoints", "prayer", "skilling", "clock", "virtual", "overlay", "led", "ulanzi", "awtrix"}
 )
 @PluginDependency(XpTrackerPlugin.class)

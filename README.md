@@ -1,40 +1,48 @@
 # Ulanzi OSRS Clock
 
-**No hardware needed.** Turn the plugin on and a small LED overlay appears on your desktop, showing your hitpoints, prayer, run energy, special attack, and when you have gone AFK. Keep it beside whatever else you are doing and you will see the moment your character needs you.
+**No hardware needed.** Turn the plugin on and a small LED overlay appears on your desktop with your hitpoints, prayer, run energy, special attack, and AFK status. Own an [Ulanzi TC001](https://github.com/rroels/ulanzi_tc001_hardware) pixel clock running [AWTRIX NG](https://blueforcer.github.io/awtrix-ng/)? The plugin can drive that instead, with the same pages.
 
-![The virtual overlay showing live stats](docs/gallery/overlay-stats.png)
+Click a picture marked ▶ to watch it move.
 
-![The overlay when you go AFK](docs/gallery/overlay-afk.png)
+### Real clock (Ulanzi TC001)
 
-If you own an [Ulanzi TC001](https://github.com/rroels/ulanzi_tc001_hardware) pixel clock running [AWTRIX NG](https://blueforcer.github.io/awtrix-ng/), the plugin can drive that instead, with the same pages.
+<table>
+<tr>
+<td><a href="docs/gallery/skill.gif"><img width="320" alt="Skill page on a real clock" src="docs/gallery/skill-still.png"></a><br><sub>▶ Skill page</sub></td>
+<td width="14"></td>
+<td><a href="docs/gallery/skill-bar.gif"><img width="320" alt="Bar toward the next level on a real clock" src="docs/gallery/skill-bar-still.png"></a><br><sub>▶ Bar toward the next level</sub></td>
+</tr>
+</table>
 
-A skill page can take over with your level and XP per hour. Low hitpoints flashes across the panel. Level-ups get a short celebration.
+### Virtual overlay
 
-## Gallery
+<table>
+<tr>
+<td><img width="212" alt="The virtual overlay showing live stats" src="docs/gallery/overlay-stats.png"><br><sub>Live stats</sub></td>
+<td width="14"></td>
+<td><a href="docs/gallery/xp-pulse.gif"><img width="212" alt="The Firemaking page pulsing as XP lands" src="docs/gallery/xp-pulse-still.png"></a><br><sub>▶ XP drop as a pulse, the default</sub></td>
+<td width="14"></td>
+<td><a href="docs/gallery/xp-drops.gif"><img width="212" alt="An XP drop rising over the skill page" src="docs/gallery/xp-drops-still.png"></a><br><sub>▶ XP drop rising</sub></td>
+</tr>
+<tr><td height="14"></td></tr>
+<tr>
+<td><a href="docs/gallery/xp-alternate.gif"><img width="212" alt="The Magic page alternating between level and XP per hour" src="docs/gallery/xp-alternate-still.png"></a><br><sub>▶ Level and XP per hour taking turns</sub></td>
+<td width="14"></td>
+<td><a href="docs/gallery/forestry.gif"><img width="212" alt="Forestry event callouts" src="docs/gallery/forestry-still.png"></a><br><sub>▶ Forestry events</sub></td>
+<td width="14"></td>
+<td><img width="212" alt="The skill page" src="docs/gallery/overlay-skill.png"><br><sub>Skill page</sub></td>
+</tr>
+<tr><td height="14"></td></tr>
+<tr>
+<td><img width="212" alt="The low hitpoints alert" src="docs/gallery/overlay-low-hp.png"><br><sub>Low hitpoints alert</sub></td>
+<td width="14"></td>
+<td><img width="212" alt="The overlay when you go AFK" src="docs/gallery/overlay-afk.png"><br><sub>AFK</sub></td>
+<td width="14"></td>
+<td><img width="212" alt="The overlay&#x27;s hover controls" src="docs/gallery/overlay-controls.png"><br><sub>Hover controls</sub></td>
+</tr>
+</table>
 
-![Skill page](docs/gallery/skill.gif)
-
-![Bar toward the next level](docs/gallery/skill-bar.gif)
-
-## The virtual overlay
-
-It is on by default and only appears while you are logged in. **Quick setup** holds the few settings most people want, and everything else is folded away below it.
-
-- Drag it anywhere, and drag any edge to resize it.
-- Hover over it for **always on top**, an **opacity** slider, **more options**, and **close**. Scrolling over it changes the opacity too.
-- **Only when tabbed out** hides it while you are playing and shows it when you switch to another window.
-- When no page is up it can show quiet dots, skill icons, the time in 12 or 24 hours, or nothing.
-- Nothing is sent over the network, and tones play through your speakers.
-
-## Connect a real clock
-
-Hover over the virtual overlay, open its options, and choose **Connect a real clock**, or fill in **Clock address** under **Real clock (Ulanzi TC001)** in the settings. As soon as the clock answers, the overlay steps aside. To keep both, set **Quick setup > Show pages on** to **Both**.
-
-### Flash the clock
-
-Stock firmware cannot show a custom page. Flash [AWTRIX NG](https://blueforcer.github.io/awtrix-ng/getting-started/flashing/) once: in Chrome or Edge, choose **Fresh install** and pick the clock's port.
-
-The clock then starts its own Wi-Fi. Join it, read the IP off the panel, and put that in **Clock address**. This plugin does not flash the device.
+<img width="644" alt="" src="docs/gallery/divider.png">
 
 ## Features
 
@@ -46,5 +54,12 @@ The clock then starts its own Wi-Fi. Join it, read the IP off the panel, and put
 - AFK takes the panel when you go idle
 - A forestry event can call out while you chop
 - A level-up shows the skill and your new level
-- Works **without any hardware**, through a virtual overlay on your desktop
 - Tones can be **Soft** or **Classic**, and play on the clock, on your computer, or not at all
+
+<img width="644" alt="" src="docs/gallery/divider.png">
+
+## Connect a real Ulanzi pixel clock
+
+Hover over the virtual overlay, open its options, and choose **Connect a real Ulanzi pixel clock**, or fill in **Clock address** under **Real clock (Ulanzi TC001)** in the settings. As soon as the clock answers, the overlay steps aside. To keep both, set **Quick setup > Show pages on** to **Both**.
+
+Stock firmware cannot show a custom page. Flash [AWTRIX NG](https://blueforcer.github.io/awtrix-ng/getting-started/flashing/) once: in Chrome or Edge, choose **Fresh install** and pick the clock's port. The clock then starts its own Wi-Fi. Join it, read the IP off the panel, and put that in **Clock address**. This plugin does not flash the device.

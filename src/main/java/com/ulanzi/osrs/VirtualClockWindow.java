@@ -414,7 +414,7 @@ class VirtualClockWindow
 			"The clock's IP address, shown on its panel. For example 192.168.1.50.\n"
 				+ "Your hitpoints, prayer, run energy, special attack, and skill progress are sent to this address.\n\n"
 				+ UlanziConfig.ADDRESS_WARNING + ".",
-			"Connect a real clock", JOptionPane.PLAIN_MESSAGE, null, null, config.host());
+			"Connect a real Ulanzi pixel clock", JOptionPane.PLAIN_MESSAGE, null, null, config.host());
 		if (answer != null)
 		{
 			set("host", answer.toString().trim());
@@ -425,7 +425,7 @@ class VirtualClockWindow
 	{
 		JPopupMenu menu = new JPopupMenu();
 
-		JMenuItem connect = new JMenuItem("Connect a real clock...");
+		JMenuItem connect = new JMenuItem("Connect a real Ulanzi pixel clock...");
 		connect.addActionListener(e -> SwingUtilities.invokeLater(this::askForClockAddress));
 		menu.add(connect);
 		menu.addSeparator();
